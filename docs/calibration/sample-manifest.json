@@ -1,0 +1,402 @@
+[
+  {
+    "sampleId": "CAL-01",
+    "corpusId": 53,
+    "company": "ChatLabs",
+    "color": "синий",
+    "type": "Символ",
+    "motif": "Предмет / артефакт"
+  },
+  {
+    "sampleId": "CAL-02",
+    "corpusId": 96,
+    "company": "mindforce",
+    "color": "зелёный",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-03",
+    "corpusId": 102,
+    "company": "No Logo Studio",
+    "color": "серый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-04",
+    "corpusId": 105,
+    "company": "OKC.Media",
+    "color": "чёрный",
+    "type": "Знак + название",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-05",
+    "corpusId": 110,
+    "company": "Original Works",
+    "color": "синий",
+    "type": "Знак + название",
+    "motif": "Человек / часть тела"
+  },
+  {
+    "sampleId": "CAL-06",
+    "corpusId": 112,
+    "company": "Out of Cloud",
+    "color": "чёрный",
+    "type": "Надпись",
+    "motif": "Природный мотив"
+  },
+  {
+    "sampleId": "CAL-07",
+    "corpusId": 124,
+    "company": "RDN Group",
+    "color": "оранжевый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-08",
+    "corpusId": 126,
+    "company": "RentaTeam",
+    "color": "синий",
+    "type": "Надпись",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-09",
+    "corpusId": 127,
+    "company": "Rhino digital",
+    "color": "красный",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-10",
+    "corpusId": 128,
+    "company": "RUSO",
+    "color": "зелёный",
+    "type": "Символ",
+    "motif": "Природный мотив"
+  },
+  {
+    "sampleId": "CAL-11",
+    "corpusId": 132,
+    "company": "Start Mobile",
+    "color": "оранжевый",
+    "type": "Символ",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-12",
+    "corpusId": 137,
+    "company": "Trend Surfers",
+    "color": "белый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-13",
+    "corpusId": 155,
+    "company": "Андерскай Digital",
+    "color": "синий",
+    "type": "Символ",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-14",
+    "corpusId": 156,
+    "company": "Апрель",
+    "color": "жёлтый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-15",
+    "corpusId": 158,
+    "company": "АСТОНИА",
+    "color": "коричневый",
+    "type": "Знак + название",
+    "motif": "Животное"
+  },
+  {
+    "sampleId": "CAL-16",
+    "corpusId": 169,
+    "company": "Лаборатория Качества",
+    "color": "чёрный",
+    "type": "Знак + название",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-17",
+    "corpusId": 170,
+    "company": "Маца",
+    "color": "красный",
+    "type": "Символ",
+    "motif": "Предмет / артефакт"
+  },
+  {
+    "sampleId": "CAL-18",
+    "corpusId": 172,
+    "company": "Метрика",
+    "color": "розовый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-19",
+    "corpusId": 210,
+    "company": "АйТи-Баланс",
+    "color": "синий",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-20",
+    "corpusId": 215,
+    "company": "ТРАЙБ студия",
+    "color": "зелёный",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-21",
+    "corpusId": 223,
+    "company": "Aiston",
+    "color": "чёрный",
+    "type": "Символ",
+    "motif": "Животное"
+  },
+  {
+    "sampleId": "CAL-22",
+    "corpusId": 225,
+    "company": "asanov-agency",
+    "color": "красный",
+    "type": "Символ",
+    "motif": "Природный мотив"
+  },
+  {
+    "sampleId": "CAL-23",
+    "corpusId": 236,
+    "company": "Digital-агентство STIK",
+    "color": "чёрный",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-24",
+    "corpusId": 241,
+    "company": "INSITE group",
+    "color": "белый",
+    "type": "Знак + название",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-25",
+    "corpusId": 254,
+    "company": "Siluet Studio",
+    "color": "чёрный",
+    "type": "Символ",
+    "motif": "Человек / часть тела"
+  },
+  {
+    "sampleId": "CAL-26",
+    "corpusId": 255,
+    "company": "Sixhands",
+    "color": "чёрный",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-27",
+    "corpusId": 270,
+    "company": "Курсор.agency",
+    "color": "белый",
+    "type": "Символ",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-28",
+    "corpusId": 287,
+    "company": "Nuts Agency",
+    "color": "оранжевый",
+    "type": "Знак + название",
+    "motif": "Человек / часть тела"
+  },
+  {
+    "sampleId": "CAL-29",
+    "corpusId": 297,
+    "company": "Deventica",
+    "color": "серый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-30",
+    "corpusId": 305,
+    "company": "Очень",
+    "color": "розовый",
+    "type": "Символ",
+    "motif": "Человек / часть тела"
+  },
+  {
+    "sampleId": "CAL-31",
+    "corpusId": 359,
+    "company": "СофтИнвент",
+    "color": "зелёный",
+    "type": "Знак + название",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-32",
+    "corpusId": 364,
+    "company": "Praweb",
+    "color": "чёрный",
+    "type": "Монограмма",
+    "motif": "Предмет / артефакт"
+  },
+  {
+    "sampleId": "CAL-33",
+    "corpusId": 367,
+    "company": "startmedia",
+    "color": "фиолетовый",
+    "type": "Знак + название",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-34",
+    "corpusId": 380,
+    "company": "stilt-itil",
+    "color": "красный",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-35",
+    "corpusId": 386,
+    "company": "Intelsy",
+    "color": "фиолетовый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-36",
+    "corpusId": 400,
+    "company": "BESTWEB",
+    "color": "бирюзовый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-37",
+    "corpusId": 406,
+    "company": "Bodysite",
+    "color": "оранжевый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-38",
+    "corpusId": 420,
+    "company": "Vverh.Digital",
+    "color": "синий",
+    "type": "Знак + название",
+    "motif": "Природный мотив"
+  },
+  {
+    "sampleId": "CAL-39",
+    "corpusId": 432,
+    "company": "IQ Dev",
+    "color": "бирюзовый",
+    "type": "Символ",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-40",
+    "corpusId": 439,
+    "company": "DEKSIS",
+    "color": "бирюзовый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-41",
+    "corpusId": 441,
+    "company": "IT-компания Xpage",
+    "color": "фиолетовый",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-42",
+    "corpusId": 446,
+    "company": "Флексайтс",
+    "color": "чёрный",
+    "type": "Монограмма",
+    "motif": "Буква / инициалы"
+  },
+  {
+    "sampleId": "CAL-43",
+    "corpusId": 450,
+    "company": "Пиробайт [Pyrobyte]",
+    "color": "розовый",
+    "type": "Знак + название",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-44",
+    "corpusId": 460,
+    "company": "CHIPSA",
+    "color": "коричневый",
+    "type": "Символ",
+    "motif": "Предмет / артефакт"
+  },
+  {
+    "sampleId": "CAL-45",
+    "corpusId": 465,
+    "company": "AEX Soft",
+    "color": "синий",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-46",
+    "corpusId": 473,
+    "company": "NAN",
+    "color": "жёлтый",
+    "type": "Надпись",
+    "motif": "Без отдельного образа"
+  },
+  {
+    "sampleId": "CAL-47",
+    "corpusId": 476,
+    "company": "Космос-Веб",
+    "color": "красный",
+    "type": "Знак + название",
+    "motif": "Технология / интерфейс"
+  },
+  {
+    "sampleId": "CAL-48",
+    "corpusId": 485,
+    "company": "Лайв Тайпинг",
+    "color": "фиолетовый",
+    "type": "Символ",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-49",
+    "corpusId": 491,
+    "company": "Красная рамка",
+    "color": "красный",
+    "type": "Знак + название",
+    "motif": "Абстрактная геометрия"
+  },
+  {
+    "sampleId": "CAL-50",
+    "corpusId": 494,
+    "company": "Можновсё",
+    "color": "жёлтый",
+    "type": "Знак + название",
+    "motif": "Человек / часть тела"
+  }
+]

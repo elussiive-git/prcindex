@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.DS_Store
+.vercel
+
+.env.local
+work/logos-snapshot.tgz
+*.tsbuildinfo
+
+work/repo-snapshot.tgz

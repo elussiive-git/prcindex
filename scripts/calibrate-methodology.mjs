@@ -1,0 +1,36 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const raw = JSON.parse(fs.readFileSync(path.join(root, "src/seed/coded494.json"), "utf8"));
+const corpus = raw.filter((row) => ![393, 424].includes(Number(row.index)));
+const outputDir = path.join(root, "docs/calibration");
+fs.mkdirSync(outputDir, { recursive: true });
+const colors = ["чёрный","серый","белый","синий","бирюзовый","зелёный","жёлтый","оранжевый","красный","розовый","фиолетовый","коричневый"];
+
+function hash(value) { let h=2166136261; for(const char of value) h=Math.imul(h^char.charCodeAt(0),16777619); return h>>>0; }
+function makeSample(rows,size=50){
+  const counts=Object.fromEntries(colors.map(color=>[color,rows.filter(row=>row.N===color).length]));
+  const quotas=Object.fromEntries(colors.map(color=>[color,2])); let remaining=size-colors.length*2;
+  const remainders=colors.map(color=>{const exact=remaining*counts[color]/rows.length,whole=Math.floor(exact);quotas[color]+=whole;return{color,remainder:exact-whole}});
+  remaining=size-Object.values(quotas).reduce((sum,value)=>sum+value,0);remainders.sort((a,b)=>b.remainder-a.remainder).slice(0,remaining).forEach(({color})=>quotas[color]++);
+  const selected=[];for(const color of colors){const group=rows.filter(row=>row.N===color).sort((a,b)=>hash(`${a.index}:20261117`)-hash(`${b.index}:20261117`)),picked=[];while(picked.length<quotas[color]&&group.length){group.sort((a,b)=>{const score=row=>picked.filter(item=>item.type_label===row.type_label).length*3+picked.filter(item=>item.motif_label===row.motif_label).length;return score(a)-score(b)||hash(`${a.index}:tie`)-hash(`${b.index}:tie`)});picked.push(group.shift())}selected.push(...picked)}return selected.sort((a,b)=>Number(a.index)-Number(b.index));
+}
+function csvCell(value){return `"${String(value??"").replaceAll('"','""')}"`}
+function writeCoderSheet(name,sample){const header=["sample_id","company","domain","logo_file","source_url","color","hex","sign_type","motif","borderline","comment"],lines=[header.map(csvCell).join(",")];sample.forEach((row,index)=>lines.push([`CAL-${String(index+1).padStart(2,"0")}`,row.B,row.C,row.E,row.F,"","","","","",""] .map(csvCell).join(",")));fs.writeFileSync(path.join(outputDir,name),lines.join("\n")+"\n")}
+function parseShares(value){return[...String(value).matchAll(/(#[0-9a-f]{6})\s+([0-9.]+)%/ig)].map(([,hex,percent])=>({hex:hex.toLowerCase(),percent:Number(percent)}))}
+function hsl(hex){const[r,g,b]=[1,3,5].map(start=>parseInt(hex.slice(start,start+2),16)/255),max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,l=(max+min)/2;let h=0;if(d){if(max===r)h=((g-b)/d)%6;else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h*60+360)%360}const s=d/(1-Math.abs(2*l-1)||1);return{h,s,l}}
+function family(hex){const{h,s,l}=hsl(hex);if(l<.18)return"чёрный";if(l>.88&&s<.28)return"белый";if(s<.18)return"серый";if(h<15||h>=345)return"красный";if(h<45)return l<.43?"коричневый":"оранжевый";if(h<70)return"жёлтый";if(h<165)return"зелёный";if(h<195)return"бирюзовый";if(h<250)return"синий";if(h<315)return"фиолетовый";return"розовый"}
+const achromatic=new Set(["чёрный","серый","белый"]);
+function classify(row,threshold){const shares=parseShares(row.S).map(item=>({...item,family:family(item.hex)})).sort((a,b)=>b.percent-a.percent),colored=shares.filter(item=>!achromatic.has(item.family)&&item.percent>=threshold);if(colored.length)return colored[0].family;return(shares.find(item=>achromatic.has(item.family))||shares[0])?.family||row.N}
+function summaryFor(assignments){const frequency=Object.fromEntries(colors.map(color=>[color,0]));assignments.forEach(color=>frequency[color]++);const top3=(frequency["чёрный"]+frequency["синий"]+frequency["красный"])/assignments.length,ach=(frequency["чёрный"]+frequency["серый"]+frequency["белый"])/assignments.length,cold=(frequency["синий"]+frequency["бирюзовый"]+frequency["зелёный"]+frequency["фиолетовый"])/assignments.length,warm=1-ach-cold;return{frequency,top3Share:+(top3*100).toFixed(1),achromaticShare:+(ach*100).toFixed(1),coldShare:+(cold*100).toFixed(1),warmShare:+(warm*100).toFixed(1)}}
+function parseCsv(file){if(!fs.existsSync(file))return[];const lines=fs.readFileSync(file,"utf8").trim().split(/\r?\n/);if(lines.length<2)return[];const parse=line=>{const out=[];let value="",quoted=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'&&quoted&&line[i+1]==='"'){value+='"';i++}else if(c==='"')quoted=!quoted;else if(c===','&&!quoted){out.push(value);value=""}else value+=c}out.push(value);return out};const header=parse(lines[0]);return lines.slice(1).map(line=>{const values=parse(line);return Object.fromEntries(header.map((key,index)=>[key,values[index]||""]))})}
+function alphaNominal(a,b,key){const byId=new Map(b.map(row=>[row.sample_id,row])),pairs=a.map(row=>[row[key],byId.get(row.sample_id)?.[key]]).filter(([x,y])=>x&&y);if(!pairs.length)return null;const n=pairs.length,disagreements=pairs.filter(([x,y])=>x!==y).length,values=pairs.flat(),counts={};values.forEach(value=>counts[value]=(counts[value]||0)+1);const total=values.length,expected=(total*total-Object.values(counts).reduce((sum,count)=>sum+count*count,0))/(total*(total-1));return expected?+(1-(disagreements/n)/expected).toFixed(3):1}
+
+const sample=makeSample(corpus);writeCoderSheet("coder-a.csv",sample);writeCoderSheet("coder-b.csv",sample);
+const manifest=sample.map((row,index)=>({sampleId:`CAL-${String(index+1).padStart(2,"0")}`,corpusId:Number(row.index),company:row.B,color:row.N,type:row.type_label,motif:row.motif_label}));fs.writeFileSync(path.join(outputDir,"sample-manifest.json"),JSON.stringify(manifest,null,2));
+const thresholds=[5,8,10,15],assignments=Object.fromEntries(thresholds.map(threshold=>[threshold,corpus.map(row=>classify(row,threshold))])),baseline=assignments[8],current=corpus.map(row=>row.N),baselineMatches=current.filter((color,index)=>color===baseline[index]).length;
+const sensitivity=thresholds.map(threshold=>({threshold,changedVs8:assignments[threshold].filter((color,index)=>color!==baseline[index]).length,...summaryFor(assignments[threshold])}));
+const coderA=parseCsv(path.join(outputDir,"coder-a.csv")),coderB=parseCsv(path.join(outputDir,"coder-b.csv")),reliability={color:alphaNominal(coderA,coderB,"color"),signType:alphaNominal(coderA,coderB,"sign_type"),motif:alphaNominal(coderA,coderB,"motif")};
+const report={generatedAt:new Date().toISOString(),seed:20261117,corpusSize:corpus.length,sampleSize:sample.length,sampleCoverage:{colors:new Set(manifest.map(x=>x.color)).size,types:new Set(manifest.map(x=>x.type)).size,motifs:new Set(manifest.map(x=>x.motif)).size},thresholdModel:{baselineMatches,baselineMismatches:corpus.length-baselineMatches,agreementPercent:+(baselineMatches/corpus.length*100).toFixed(1),status:baselineMatches===corpus.length?"validated":"prototype-needs-color-family-calibration"},sensitivity,reliability,status:Object.values(reliability).every(x=>x!==null)?"calculated":"awaiting-second-independent-coding"};fs.writeFileSync(path.join(outputDir,"report.json"),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

@@ -1,0 +1,113 @@
+{
+  "generatedAt": "2026-11-17T18:07:14.217Z",
+  "seed": 20261117,
+  "corpusSize": 492,
+  "sampleSize": 50,
+  "sampleCoverage": {
+    "colors": 12,
+    "types": 4,
+    "motifs": 8
+  },
+  "thresholdModel": {
+    "baselineMatches": 420,
+    "baselineMismatches": 72,
+    "agreementPercent": 85.4,
+    "status": "prototype-needs-color-family-calibration"
+  },
+  "sensitivity": [
+    {
+      "threshold": 5,
+      "changedVs8": 13,
+      "frequency": {
+        "чёрный": 134,
+        "серый": 10,
+        "белый": 15,
+        "синий": 95,
+        "бирюзовый": 21,
+        "зелёный": 30,
+        "жёлтый": 24,
+        "оранжевый": 37,
+        "красный": 75,
+        "розовый": 14,
+        "фиолетовый": 34,
+        "коричневый": 3
+      },
+      "top3Share": 61.8,
+      "achromaticShare": 32.3,
+      "coldShare": 36.6,
+      "warmShare": 31.1
+    },
+    {
+      "threshold": 8,
+      "changedVs8": 0,
+      "frequency": {
+        "чёрный": 146,
+        "серый": 11,
+        "белый": 15,
+        "синий": 93,
+        "бирюзовый": 20,
+        "зелёный": 27,
+        "жёлтый": 24,
+        "оранжевый": 36,
+        "красный": 72,
+        "розовый": 13,
+        "фиолетовый": 32,
+        "коричневый": 3
+      },
+      "top3Share": 63.2,
+      "achromaticShare": 35,
+      "coldShare": 35,
+      "warmShare": 30.1
+    },
+    {
+      "threshold": 10,
+      "changedVs8": 7,
+      "frequency": {
+        "чёрный": 151,
+        "серый": 12,
+        "белый": 16,
+        "синий": 93,
+        "бирюзовый": 19,
+        "зелёный": 26,
+        "жёлтый": 24,
+        "оранжевый": 36,
+        "красный": 71,
+        "розовый": 11,
+        "фиолетовый": 31,
+        "коричневый": 2
+      },
+      "top3Share": 64,
+      "achromaticShare": 36.4,
+      "coldShare": 34.3,
+      "warmShare": 29.3
+    },
+    {
+      "threshold": 15,
+      "changedVs8": 25,
+      "frequency": {
+        "чёрный": 167,
+        "серый": 14,
+        "белый": 16,
+        "синий": 90,
+        "бирюзовый": 18,
+        "зелёный": 23,
+        "жёлтый": 22,
+        "оранжевый": 33,
+        "красный": 67,
+        "розовый": 11,
+        "фиолетовый": 29,
+        "коричневый": 2
+      },
+      "top3Share": 65.9,
+      "achromaticShare": 40,
+      "coldShare": 32.5,
+      "warmShare": 27.4
+    }
+  ],
+  "reliability": {
+    "color": null,
+    "signType": null,
+    "motif": null
+  },
+  "status": "awaiting-second-independent-coding"
+}

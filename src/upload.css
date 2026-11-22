@@ -1,0 +1,1 @@
+.drop label{width:min(460px,100%);display:grid;gap:5px;text-align:left;font-size:11px;color:#666}.drop label input{border:1px solid #d8d8d2;padding:9px;background:#fff}.drop button{margin-top:5px}.drop button:disabled{opacity:.45}.uploadok{color:#26764b!important;background:#e9f6ee;padding:8px}.uploaderror{color:#a12d24!important;background:#fff0ed;padding:8px}

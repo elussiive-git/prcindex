@@ -1,0 +1,32 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+const source=JSON.parse(await fs.readFile(path.join(root,"src/seed/registry-batch-001.json"),"utf8"));
+const offset=Number(process.argv[2]||0),limit=Number(process.argv[3]||300),rows=source.slice(offset,offset+limit);
+const outDir=path.join(root,"public/registry-logos");await fs.mkdir(outDir,{recursive:true});
+const rules={
+  "Заказная веб-разработка":["разработка сайтов","веб-разработка","web development","интернет-магазин","веб-приложен"],
+  "Заказная мобильная разработка":["мобильная разработка","мобильных приложений","ios","android","flutter"],
+  "Комплексная заказная разработка":["заказная разработка","разработка программного обеспечения на заказ","полный цикл разработки","software development"],
+  "Разработка корпоративного ПО":["корпоративное по","erp","crm","автоматизация бизнеса","электронный документооборот"],
+  "Системная интеграция":["системная интеграция","интегратор","внедрение информационных систем","интеграция систем"],
+  "Информационная безопасность":["информационная безопасность","кибербезопасность","защита информации","soc","антивирус"],
+  "Искусственный интеллект и данные":["искусственный интеллект","машинное обучение","нейросет","big data","анализ данных","computer vision"],
+  "Облачные сервисы и инфраструктура":["облачные сервисы","облачная инфраструктура","дата-центр","цод","devops","hosting","iaas","paas"],
+  "Собственные программные продукты / SaaS":["наша платформа","наш продукт","saas","программный продукт","решение для","сервис для бизнеса"],
+  "Телекоммуникации":["телеком","оператор связи","услуги связи","телефония","сети связи"],
+  "Оборудование и embedded-разработка":["оборудование","микроэлектроник","встраиваем","embedded","контроллер","прибор"],
+  "ИТ-консалтинг и аутсорсинг":["ит-аутсорсинг","it-аутсорсинг","техническая поддержка","ит-консалтинг","сопровождение информационных систем"],
+  "Digital-маркетинг и дизайн":["digital-агентство","маркетинговое агентство","продвижение сайтов","seo","брендинг","ux/ui"],
+  "Корпоративное ИТ-подразделение":["ит-компания группы","цифровые продукты компании","технологическое подразделение","для группы компаний"],
+};
+const specialties={"веб-разработка":["веб-разработ","разработка сайтов","web development"],"мобильная разработка":["мобильн","ios","android","flutter"],"UX/UI":["ux/ui","интерфейс","пользовательский опыт"],"данные и ИИ":["искусственн","машинн","нейросет","big data","анализ данных"],"информационная безопасность":["безопасност","защита информации","soc"],"облачная инфраструктура":["облачн","devops","цод","iaas","paas"],"интеграция":["интеграц","внедрение"],"техническая поддержка":["техническая поддержка","сопровождение"]};
+const clean=s=>s.replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&[a-z]+;/gi," ").replace(/\s+/g," ").toLowerCase();
+function classify(text){const scored=Object.entries(rules).map(([segment,words])=>({segment,hits:words.filter(w=>text.includes(w))})).sort((a,b)=>b.hits.length-a.hits.length);const top=scored[0];const tags=Object.entries(specialties).filter(([,words])=>words.some(w=>text.includes(w))).map(([name])=>name).slice(0,5);return{segment:top?.hits.length?top.segment:"Не определено",classification_status:top?.hits.length>=2?"candidate":"needs_review",confidence:top?.hits.length>=3?"Высокая":top?.hits.length>=2?"Средняя":"Низкая",matched:top?.hits||[],tags};}
+function logoCandidates(html,base){const found=[];for(const m of html.matchAll(/(?:src|href|content)=["']([^"']+)["']/gi)){const raw=m[1].replaceAll("&amp;","&").replaceAll("\\/","/");if(!/(logo|brand|logotype)/i.test(raw)||/(favicon|apple-touch|sprite|loader)/i.test(raw))continue;try{const url=new URL(raw,base);if(!/^https?:$/.test(url.protocol))continue;found.push({url:url.href,score:(/logo/i.test(raw)?5:0)+(/\.svg(?:\?|$)/i.test(raw)?4:0)+(/header|brand/i.test(raw)?2:0)});}catch{}}return[...new Map(found.sort((a,b)=>b.score-a.score).map(x=>[x.url,x])).values()].slice(0,8)}
+async function timed(url,ms=10000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{redirect:"follow",signal:c.signal,headers:{"user-agent":"Mozilla/5.0 PRCIndexResearch/1.0"}})}finally{clearTimeout(t)}}
+async function research(row){const base={inn:row.inn,website:row.website,checked_at:new Date().toISOString(),page_status:"error",logo_status:"not_found",logo_file:null,logo_url:null,segment:"Не определено",classification_status:"needs_review",confidence:"Низкая",tags:[],matched:[]};try{const page=await timed(row.website);if(!page.ok)return{...base,page_status:String(page.status)};const html=await page.text(),text=clean(html).slice(0,250000),classification=classify(text);let logo={};for(const option of logoCandidates(html,page.url)){try{const image=await timed(option.url,8000);if(!image.ok)continue;const type=(image.headers.get("content-type")||"").split(";")[0];if(!type.startsWith("image/")||/icon/.test(type))continue;const bytes=Buffer.from(await image.arrayBuffer());if(bytes.length<500||bytes.length>2000000)continue;const ext=type.includes("svg")?"svg":type.includes("png")?"png":type.includes("webp")?"webp":type.includes("jpeg")?"jpg":null;if(!ext)continue;const file=`${row.inn}.${ext}`;await fs.writeFile(path.join(outDir,file),bytes);logo={logo_status:"candidate",logo_file:`/registry-logos/${file}`,logo_url:image.url};break}catch{}}return{...base,page_status:"ok",...classification,...logo};}catch(e){return{...base,page_status:e?.name==="AbortError"?"timeout":"error"}}}
+const results=[];for(let i=0;i<rows.length;i+=10){results.push(...await Promise.all(rows.slice(i,i+10).map(research)));console.log(`${offset+results.length}/${offset+rows.length} · лого ${results.filter(x=>x.logo_status==="candidate").length} · классифицировано ${results.filter(x=>x.classification_status==="candidate").length}`)}
+const file=`registry-research-${String(offset).padStart(4,"0")}-${String(offset+rows.length-1).padStart(4,"0")}.json`;await fs.writeFile(path.join(root,"src/seed",file),JSON.stringify(results));console.log(JSON.stringify({file,checked:results.length,logos:results.filter(x=>x.logo_status==="candidate").length,classified:results.filter(x=>x.classification_status==="candidate").length,pageErrors:results.filter(x=>x.page_status!=="ok").length},null,2));

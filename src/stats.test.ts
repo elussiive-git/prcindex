@@ -1,0 +1,1 @@
+import{describe,it,expect}from'vitest';import{chiSquare,cramersV,holm}from'./stats';describe('stats',()=>{it('computes independence',()=>{expect(chiSquare([[10,10],[20,20]])).toBe(0);expect(cramersV([[10,10],[20,20]])).toBe(0)});it('applies Holm',()=>expect(holm([.01,.03,.2])).toEqual([.03,.06,.2]))});

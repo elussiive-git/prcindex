@@ -1,0 +1,23 @@
+export type Logo = {
+  id: number;
+  name: string;
+  site: string;
+  file: string;
+  imageUrl?: string;
+  geo: string;
+  segment: string;
+  rank: string;
+  color: string;
+  hex: string;
+  palette?: { name: string; hex: string; share?: number }[];
+  paletteType?: "Одноцветный" | "Двухцветный" | "Многоцветный";
+  achromatic: boolean;
+  signType: string;
+  motif: string;
+  borderline: boolean;
+  status: "Проверено" | "Требует проверки";
+  source: string;
+  change?: string;
+  annotationId?: string;
+  annotationValues?: Record<string, unknown>;
+};
