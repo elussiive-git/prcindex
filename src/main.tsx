@@ -93,7 +93,7 @@ function App() {
         <div className="snapshot">
           <span>Зафиксированный корпус</span>
           <b>Основной · 17.11.2026</b>
-          <small>492 записи · методика v1.1</small>
+          <small>492 записи · методика v2.1</small>
         </div>
         <div className="user">
           <div>ЕГ</div>
@@ -125,7 +125,7 @@ function App() {
                 n={logos.filter((x) => x.borderline).length}
                 l="пограничных случаев"
               />
-              <Stat n="v1.1" l="активная методика" />
+              <Stat n="v2.1" l="активная методика" />
             </section>
             <section className="toolbar">
               <label>
