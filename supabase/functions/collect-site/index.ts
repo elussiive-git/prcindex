@@ -90,7 +90,8 @@ function pickLogo(doc: ReturnType<DOMParser["parseFromString"]>, base: URL): Log
   const describe = (el: Element) =>
     [el.getAttribute("src"), el.getAttribute("data-src"), el.getAttribute("alt"), el.getAttribute("class"), el.getAttribute("id"),
      el.parentElement?.getAttribute("class"), el.parentElement?.getAttribute("aria-label")].filter(Boolean).join(" ");
-  const flagsFor = (s: string) => (/(white|_w\.|-w\.|_wh|light|inverse|negativ|_neg|-neg|belyj|beliy|_inv)/i.test(s) ? ["inverted"] : []);
+  // «белый логотип» по имени файла угадывать ненадёжно (ложные срабатывания) — пометку ставит сканер (inverted_auto)
+  const flagsFor = (_s: string): string[] => [];
   const isRootLink = (a: Element | null) => {
     if (!a) return false;
     const h = (a.getAttribute("href") || "").trim();
