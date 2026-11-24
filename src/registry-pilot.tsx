@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   ExternalLink,
@@ -260,7 +260,9 @@ const paletteTypes: Candidate["paletteType"][] = [
 ];
 // Старые правки, сделанные до переезда в базу, хранились только в этом браузере
 const legacyKey = "prcindex-candidate-work-v3";
-type Queue = "main" | "logo" | "classification" | "review";
+type Queue = "main" | "logo" | "classification" | "review" | "recheck";
+// На перепроверку через Chrome: отклонённые логотипы и сайты, которые сервер не смог разобрать
+const RECHECK_SITE = ["no_inn", "needs_browser", "unreachable", "cert_error", "other_inn", "domain_lost"];
 type Counts = { total: number; site: number; ready: number; logo: number; classification: number; review: number };
 const pageSize = 100;
 
@@ -268,16 +270,17 @@ const pageSize = 100;
 function applyQueue(query: any, queue: Queue) {
   if (queue === "logo") return query.neq("logo_status", "ready");
   if (queue === "review") return query.eq("logo_status", "needs_check").not("logo_storage_path", "is", null);
+  if (queue === "recheck") return query.or(`site_status.in.(${RECHECK_SITE.join(",")}),logo_flags.cs.{rejected}`);
   if (queue === "classification") return query.eq("classification_status", "needs");
   return query.eq("logo_status", "ready").eq("classification_status", "ready");
 }
 
-export function RegistryPilot() {
+export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
   const [items, setItems] = useState<Candidate[]>([]);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [shownTotal, setShownTotal] = useState(0);
   const [selectedInn, setSelectedInn] = useState<string | null>(null);
-  const [queue, setQueue] = useState<Queue>("main");
+  const [queue, setQueue] = useState<Queue>(mode === "recheck" ? "recheck" : "main");
   const [visible, setVisible] = useState(pageSize);
   const [search, setSearch] = useState("");
   const [term, setTerm] = useState("");
@@ -403,45 +406,63 @@ export function RegistryPilot() {
   }, [loadCounts, loadPage]);
 
   const [batch, setBatch] = useState("");
-  async function collectBatch() {
+  const stopRef = useRef(false);
+  async function collectAll(onlyOne: boolean) {
     if (!supabase) return;
     const db = supabase;
-    setBatch("Ищем компании…");
-    const { data, error: e } = await db
-      .from("registry_companies")
-      .select("inn,name")
-      .not("website", "is", null)
-      .is("site_checked_at", null)
-      .order("headcount", { ascending: false, nullsFirst: false })
-      .order("inn")
-      .limit(50);
-    if (e) { setBatch("Ошибка: " + e.message); return; }
-    const list = (data ?? []) as { inn: string; name: string }[];
+    stopRef.current = false;
     const stat: Record<string, number> = {};
-    let codes = 0, logos = 0;
-    const failed: string[] = [];
-    let done = 0;
-    const worker = async () => {
-      while (list.length) {
-        const it = list.shift()!;
-        const { data: res, error: fe } = await db.functions.invoke("collect-site", { body: { inn: it.inn } });
-        const r = res as { site_status?: string; codes?: string[]; logo?: boolean; error?: string } | null;
-        if (fe || r?.error) failed.push(`${tidyName(it.name)}: ${r?.error || fe?.message}`);
-        else {
-          stat[r!.site_status ?? "?"] = (stat[r!.site_status ?? "?"] ?? 0) + 1;
-          if (r!.codes?.length) codes++;
-          if (r!.logo) { logos++; try { await prescan(it.inn); } catch { /* пометки не критичны */ } }
-        }
-        done++;
-        setBatch(`Собираем сайты: ${done} из 50…`);
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
+    let codes = 0, logos = 0, done = 0, errors = 0;
     const label: Record<string, string> = { ok: "свой сайт", other_inn: "чужой ИНН", no_inn: "ИНН не найден", unreachable: "не открылся", cert_error: "сертификат", domain_lost: "домен потерян", needs_browser: "нужен браузер" };
-    setBatch(
-      `Готово: ${done} сайтов. ` + Object.entries(stat).map(([k, v]) => `${label[k] ?? k} — ${v}`).join(", ") +
-      `. Логотип найден у ${logos}, коды Минцифры — у ${codes}.` + (failed.length ? ` Ошибки: ${failed.join("; ")}` : ""),
-    );
+    const summary = () =>
+      Object.entries(stat).map(([k, v]) => `${label[k] ?? k} — ${v}`).join(", ") +
+      `. Логотип найден у ${logos}, коды Минцифры — у ${codes}` + (errors ? `, ошибок функции — ${errors} (ушли в «Перепроверку»)` : "");
+    for (;;) {
+      if (stopRef.current) break;
+      setBatch(`Собираем сайты: ${done} готово… ${summary()}`);
+      const { data, error: e } = await db
+        .from("registry_companies")
+        .select("inn,name")
+        .not("website", "is", null)
+        .is("site_checked_at", null)
+        .order("headcount", { ascending: false, nullsFirst: false })
+        .order("inn")
+        .limit(60);
+      if (e) { setBatch("Ошибка: " + e.message); return; }
+      const list = (data ?? []) as { inn: string; name: string }[];
+      if (!list.length) break;
+      const worker = async () => {
+        while (list.length && !stopRef.current) {
+          const it = list.shift()!;
+          type CollectRes = { site_status?: string; codes?: string[]; logo?: boolean; error?: string };
+          let res: CollectRes = {};
+          let fail = "";
+          try {
+            const out = await db.functions.invoke("collect-site", { body: { inn: it.inn } });
+            res = (out.data ?? {}) as CollectRes;
+            if (out.error || res.error) fail = res.error || String(out.error?.message ?? "ошибка");
+          } catch (err) { fail = String((err as Error).message ?? err); }
+          if (fail) {
+            errors++;
+            // помечаем, чтобы не выбирать снова, и отправляем в перепроверку
+            await db.from("registry_companies").update({
+              site_status: "needs_browser", site_checked_at: new Date().toISOString(),
+              site_note: "Функция сбора не справилась с сайтом (" + fail.slice(0, 120) + ") — нужен проход через Chrome.",
+            }).eq("inn", it.inn);
+          } else {
+            stat[res.site_status ?? "?"] = (stat[res.site_status ?? "?"] ?? 0) + 1;
+            if (res.codes?.length) codes++;
+            if (res.logo) { logos++; try { await prescan(it.inn); } catch { /* пометки не критичны */ } }
+          }
+          done++;
+          if (done % 5 === 0) setBatch(`Собираем сайты: ${done} готово… ${summary()}`);
+        }
+      };
+      await Promise.all(Array.from({ length: 6 }, worker));
+      void loadCounts();
+      if (onlyOne) break;
+    }
+    setBatch(`${stopRef.current ? "Остановлено" : "Готово"}: обработано ${done} сайтов. ${summary()}.`);
     await Promise.all([loadCounts(), loadPage()]);
   }
   async function scanBatch() {
@@ -507,6 +528,10 @@ export function RegistryPilot() {
       "Требуется классификация",
       "Уточните сегмент, специализации и цветовую разметку",
     ],
+    recheck: [
+      "Перепроверка через Chrome",
+      "Отклонённые логотипы и сайты, которые сервер не смог разобрать: причина — на карточке",
+    ],
     review: [
       "Проверка логотипов",
       "Логотип найден автоматически: «Верно» — подтвердить, «Не тот» — отправить на повторный поиск",
@@ -514,6 +539,19 @@ export function RegistryPilot() {
   } as const;
   return (
     <div className="registry-pilot">
+      {mode === "recheck" ? (
+        <section className="registry-summary">
+          <div>
+            <span>Очередь для прохода через Chrome</span>
+            <h2>Перепроверка</h2>
+            <p>Сюда автоматически попадают отклонённые логотипы и сайты без ИНН, с российским сертификатом, не открывшиеся или собирающиеся только в браузере.</p>
+          </div>
+          <div className="registry-count">
+            <b>{fmt(shownTotal)}</b>
+            <small>карточек</small>
+          </div>
+        </section>
+      ) : (<>
       <section className="registry-summary">
         <div>
           <span>Срез реестра от 03.11.2026</span>
@@ -563,6 +601,7 @@ export function RegistryPilot() {
           <span>проверка логотипов</span>
         </button>
       </div>
+      </>)}
       <label className="registry-search">
         <Search size={16} />
         <input
@@ -571,15 +610,21 @@ export function RegistryPilot() {
           placeholder="Название, домен или ИНН"
         />
       </label>
-      <div className="registry-tools">
-        <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={collectBatch}>
-          Собрать следующие 50 сайтов (логотип + коды)
+      {mode !== "recheck" && <div className="registry-tools">
+        <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={() => collectAll(true)}>
+          Собрать следующие 60 сайтов
         </button>
+        <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={() => collectAll(false)}>
+          Собрать все оставшиеся сайты
+        </button>
+        {batch.startsWith("Собираем") && (
+          <button className="load-more" onClick={() => { stopRef.current = true; }}>Остановить</button>
+        )}
         <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={scanBatch}>
           Определить цвет у карточек с логотипом (до 50 за раз)
         </button>
         {batch && <span>{batch}</span>}
-      </div>
+      </div>}
       {error && <p className="save-error">Не удалось загрузить данные: {error}</p>}
       {notice && <p className="save-ok">{notice}</p>}
       <div className="sectionhead">
@@ -610,6 +655,12 @@ export function RegistryPilot() {
                 {x.logoFlags.filter((f) => FLAG_LABEL[f] && f !== "rejected").length > 0 && (
                   <div className="candidate-flags">
                     {x.logoFlags.filter((f) => FLAG_LABEL[f] && f !== "rejected").map((f) => <i key={f}>{FLAG_LABEL[f]}</i>)}
+                  </div>
+                )}
+                {queue === "recheck" && (
+                  <div className="candidate-flags recheck-reason">
+                    {x.logoFlags.includes("rejected") && <i>логотип отклонён</i>}
+                    {x.siteStatus && x.siteStatus !== "ok" && <i>{siteStatusLabel[x.siteStatus] ?? x.siteStatus}</i>}
                   </div>
                 )}
                 {queue === "review" && (

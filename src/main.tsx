@@ -13,6 +13,7 @@ import {
   BookOpenCheck,
   Building2,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { AuthGate } from "./auth";
 import { useCatalogLogos } from "./remote";
@@ -28,6 +29,7 @@ import "./theme.css";
 type Page =
   | "Каталог"
   | "Кандидаты"
+  | "Перепроверка"
   | "Загрузка"
   | "Разметка"
   | "Аналитика"
@@ -36,6 +38,7 @@ type Page =
 const pages: Page[] = [
     "Каталог",
     "Кандидаты",
+    "Перепроверка",
     "Загрузка",
     "Разметка",
     "Аналитика",
@@ -45,6 +48,7 @@ const pages: Page[] = [
   icons = [
     Database,
     Building2,
+    RotateCcw,
     Upload,
     ShieldCheck,
     BarChart3,
@@ -189,6 +193,7 @@ function App() {
         )}
         {page === "Аналитика" && <AnalyticsDashboardV2 items={logos} />}
         {page === "Кандидаты" && <RegistryPilot />}
+        {page === "Перепроверка" && <RegistryPilot key="recheck" mode="recheck" />}
         {page === "Загрузка" && <UploadWorkflow />}
         {page === "Разметка" && <ReviewQueue />}
         {page === "Методика" && (<><Methodology /><ScannerCheck /></>)}
