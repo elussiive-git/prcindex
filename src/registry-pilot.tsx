@@ -51,6 +51,8 @@ type Candidate = {
   storagePath: string;
   colorScanned: boolean;
   displayLogo?: string;
+  primaryAuto: boolean;
+  siteDescription: string;
 };
 type DbRow = {
   inn: string;
@@ -83,10 +85,12 @@ type DbRow = {
   site_note: string | null;
   logo_storage_path: string | null;
   color_scanned_at: string | null;
+  primary_code_auto: boolean | null;
+  site_description: string | null;
   created_at: string;
 };
 const columns =
-  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,primary_code,logo_flags,site_status,site_note,logo_storage_path,color_scanned_at,created_at";
+  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,primary_code,logo_flags,site_status,site_note,logo_storage_path,color_scanned_at,primary_code_auto,site_description,created_at";
 
 const tidyName = (name: string) =>
   name
@@ -133,6 +137,8 @@ const toCandidate = (x: DbRow): Candidate => ({
   siteNote: x.site_note || "",
   storagePath: x.logo_storage_path || "",
   colorScanned: Boolean(x.color_scanned_at),
+  primaryAuto: Boolean(x.primary_code_auto),
+  siteDescription: x.site_description || "",
 });
 const toDb = (x: Candidate) => ({
   brand: x.brand,
@@ -147,6 +153,7 @@ const toDb = (x: Candidate) => ({
   segment_source: x.segmentSource,
   codes_found_url: x.codesUrl || null,
   primary_code: x.primaryCode || null,
+  primary_code_auto: x.primaryAuto,
   logo_flags: x.logoFlags,
   updated_at: new Date().toISOString(),
 });
@@ -357,6 +364,47 @@ export function RegistryPilot() {
   }, [loadCounts, loadPage]);
 
   const [batch, setBatch] = useState("");
+  async function collectBatch() {
+    if (!supabase) return;
+    const db = supabase;
+    setBatch("Ищем компании…");
+    const { data, error: e } = await db
+      .from("registry_companies")
+      .select("inn,name")
+      .not("website", "is", null)
+      .is("site_checked_at", null)
+      .order("headcount", { ascending: false, nullsFirst: false })
+      .order("inn")
+      .limit(50);
+    if (e) { setBatch("Ошибка: " + e.message); return; }
+    const list = (data ?? []) as { inn: string; name: string }[];
+    const stat: Record<string, number> = {};
+    let codes = 0, logos = 0;
+    const failed: string[] = [];
+    let done = 0;
+    const worker = async () => {
+      while (list.length) {
+        const it = list.shift()!;
+        const { data: res, error: fe } = await db.functions.invoke("collect-site", { body: { inn: it.inn } });
+        const r = res as { site_status?: string; codes?: string[]; logo?: boolean; error?: string } | null;
+        if (fe || r?.error) failed.push(`${tidyName(it.name)}: ${r?.error || fe?.message}`);
+        else {
+          stat[r!.site_status ?? "?"] = (stat[r!.site_status ?? "?"] ?? 0) + 1;
+          if (r!.codes?.length) codes++;
+          if (r!.logo) logos++;
+        }
+        done++;
+        setBatch(`Собираем сайты: ${done} из 50…`);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    const label: Record<string, string> = { ok: "свой сайт", other_inn: "чужой ИНН", no_inn: "ИНН не найден", unreachable: "не открылся", cert_error: "сертификат", domain_lost: "домен потерян" };
+    setBatch(
+      `Готово: ${done} сайтов. ` + Object.entries(stat).map(([k, v]) => `${label[k] ?? k} — ${v}`).join(", ") +
+      `. Логотип найден у ${logos}, коды Минцифры — у ${codes}.` + (failed.length ? ` Ошибки: ${failed.join("; ")}` : ""),
+    );
+    await Promise.all([loadCounts(), loadPage()]);
+  }
   async function scanBatch() {
     if (!supabase) return;
     setBatch("Ищем карточки…");
@@ -462,7 +510,10 @@ export function RegistryPilot() {
         />
       </label>
       <div className="registry-tools">
-        <button className="load-more" disabled={batch.startsWith("Определяем") || batch.startsWith("Ищем")} onClick={scanBatch}>
+        <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={collectBatch}>
+          Собрать следующие 50 сайтов (логотип + коды)
+        </button>
+        <button className="load-more" disabled={/^(Определяем|Ищем|Собираем)/.test(batch)} onClick={scanBatch}>
           Определить цвет у карточек с логотипом (до 50 за раз)
         </button>
         {batch && <span>{batch}</span>}
@@ -645,6 +696,7 @@ function CandidateDrawer({
       itCodes: codes,
       codesUrl,
       primaryCode: activePrimary,
+      primaryAuto: false,
       logoFlags,
       segmentSource: (codeSegment
         ? "codes"
@@ -810,6 +862,12 @@ function CandidateDrawer({
                 placeholder="https://site.ru/about"
               />
             </label>
+            {item.primaryAuto && activePrimary === item.primaryCode && (
+              <p className="save-error">
+                Основной код {item.primaryCode} предложен автоматически. Проверьте по описанию
+                сайта и сохраните карточку — это подтвердит выбор.
+              </p>
+            )}
             {codeSegment ? (
               <p className="codes-result">
                 {activePrimary ? `Основной код ${activePrimary} → ` : "Основной код не выбран, сегмент по большинству кодов → "}
@@ -962,6 +1020,7 @@ function CandidateDrawer({
             ["Источник", "Реестр Минцифры, срез 03.11.2026"],
             ["Сотрудников", item.headcount === null ? "нет данных" : item.headcount.toLocaleString("ru-RU")],
             ["Сайт", siteStatusLabel[item.siteStatus] || "не проверялся"],
+            ...(item.siteDescription ? [["Описание с сайта", item.siteDescription]] : []),
             ...(item.siteNote ? [["Заметка", item.siteNote]] : []),
             ["Коды Минцифры", item.itCodes.length ? item.itCodes.join(", ") : "не указаны"],
             ["Основной код", item.primaryCode || "—"],
