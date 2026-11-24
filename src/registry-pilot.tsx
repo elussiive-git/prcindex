@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "./auth";
+import { IT_CODES, SEGMENTS, codeInfo, primarySegment } from "./it-codes";
 import "./registry-pilot.css";
 
 // Кандидаты нового корпуса: все действующие компании реестра Минцифры (таблица registry_companies).
@@ -38,6 +39,10 @@ type Candidate = {
   logoStatus: LogoStatus;
   classificationStatus: "needs" | "ready";
   customLogo?: string;
+  itCodes: string[];
+  segmentSource: "codes" | "description" | null;
+  codesUrl: string;
+  segmentLegacy: string;
 };
 type DbRow = {
   inn: string;
@@ -60,10 +65,14 @@ type DbRow = {
   logo_url: string | null;
   logo_status: LogoStatus;
   classification_status: "needs" | "ready";
+  it_codes: string[] | null;
+  segment_source: "codes" | "description" | null;
+  codes_found_url: string | null;
+  segment_legacy: string | null;
   created_at: string;
 };
 const columns =
-  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,created_at";
+  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,created_at";
 
 const tidyName = (name: string) =>
   name
@@ -99,6 +108,10 @@ const toCandidate = (x: DbRow): Candidate => ({
   logoStatus: x.logo_status,
   classificationStatus: x.classification_status,
   customLogo: x.logo_url || undefined,
+  itCodes: x.it_codes || [],
+  segmentSource: x.segment_source,
+  codesUrl: x.codes_found_url || "",
+  segmentLegacy: x.segment_legacy || "",
 });
 const toDb = (x: Candidate) => ({
   brand: x.brand,
@@ -109,6 +122,9 @@ const toDb = (x: Candidate) => ({
   logo_url: x.customLogo || null,
   logo_status: x.logoStatus,
   classification_status: x.classificationStatus,
+  it_codes: x.itCodes,
+  segment_source: x.segmentSource,
+  codes_found_url: x.codesUrl || null,
   updated_at: new Date().toISOString(),
 });
 const logo = (x: Candidate) => x.customLogo || placeholder;
@@ -388,6 +404,12 @@ export function RegistryPilot() {
                   <small>
                     {x.website ? x.website.replace(/^https?:\/\//, "") : "сайт не указан"}
                   </small>
+                  {x.segment !== "Не определено" && (
+                    <small className="candidate-segment-line" title={x.itCodes.join(", ")}>
+                      {x.segment}
+                      {x.itCodes.length ? ` · ${x.itCodes.length} код.` : " · по описанию"}
+                    </small>
+                  )}
                   <div>
                     <span className="candidate-palette-dots">
                       {x.palette.map((c, i) => (
@@ -445,6 +467,8 @@ function CandidateDrawer({
   const [palette, setPalette] = useState(item.palette),
     [paletteType, setPaletteType] = useState(item.paletteType),
     [segment, setSegment] = useState(item.segment),
+    [codes, setCodes] = useState<string[]>(item.itCodes),
+    [codesUrl, setCodesUrl] = useState(item.codesUrl),
     [tags, setTags] = useState(item.tags.join(", ")),
     [customLogo, setCustomLogo] = useState(item.customLogo || ""),
     [logoConfirmed, setLogoConfirmed] = useState(
@@ -456,6 +480,8 @@ function CandidateDrawer({
     setPalette(item.palette);
     setPaletteType(item.paletteType);
     setSegment(item.segment);
+    setCodes(item.itCodes);
+    setCodesUrl(item.codesUrl);
     setTags(item.tags.join(", "));
     setCustomLogo(item.customLogo || "");
     setLogoConfirmed(item.logoStatus === "ready");
@@ -476,6 +502,12 @@ function CandidateDrawer({
     };
     reader.readAsDataURL(file);
   }
+  const codeSegment = primarySegment(codes);
+  function toggleCode(code: string) {
+    setCodes((current) =>
+      current.includes(code) ? current.filter((c) => c !== code) : [...current, code],
+    );
+  }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!palette.length) {
@@ -490,7 +522,14 @@ function CandidateDrawer({
       ...item,
       palette: palette.map((x) => ({ ...x, hex: x.hex.toUpperCase() })),
       paletteType,
-      segment,
+      segment: codeSegment || segment,
+      itCodes: codes,
+      codesUrl,
+      segmentSource: (codeSegment
+        ? "codes"
+        : segment && segment !== "Не определено"
+          ? "description"
+          : null) as Candidate["segmentSource"],
       tags: tags
         .split(",")
         .map((x) => x.trim())
@@ -501,7 +540,7 @@ function CandidateDrawer({
         : customLogo
           ? "needs_check"
           : "needs_search") as LogoStatus,
-      classificationStatus: (segment && segment !== "Не определено"
+      classificationStatus: ((codeSegment || segment) && (codeSegment || segment) !== "Не определено"
         ? "ready"
         : "needs") as Candidate["classificationStatus"],
     };
@@ -519,24 +558,7 @@ function CandidateDrawer({
       setSaving(false);
     }
   }
-  const segments = [
-    "Заказная веб-разработка",
-    "Заказная мобильная разработка",
-    "Комплексная заказная разработка",
-    "Разработка корпоративного ПО",
-    "Системная интеграция",
-    "Информационная безопасность",
-    "Искусственный интеллект и данные",
-    "Облачные сервисы и инфраструктура",
-    "Собственные программные продукты / SaaS",
-    "Телекоммуникации",
-    "Оборудование и embedded-разработка",
-    "ИТ-консалтинг и аутсорсинг",
-    "Digital-маркетинг и дизайн",
-    "Корпоративное ИТ-подразделение",
-    "Другое",
-    "Не определено",
-  ];
+  const segments = [...SEGMENTS, "Не определено"];
   return (
     <div className="backdrop" onClick={close}>
       <aside
@@ -607,11 +629,52 @@ function CandidateDrawer({
             </label>
           </div>
           <div className="work-section">
-            <b>Классификация</b>
+            <b>Классификация по перечню Минцифры (приказ № 449)</b>
+            <small className="codes-hint">
+              Отметьте коды, указанные на сайте компании. Сегмент считается по
+              кодам автоматически.
+            </small>
+            <div className="codes-list">
+              {SEGMENTS.map((seg) => (
+                <fieldset key={seg}>
+                  <legend>{seg}</legend>
+                  {IT_CODES.filter((c) => c.segment === seg).map((c) => (
+                    <label key={c.code} className="code-check">
+                      <input
+                        type="checkbox"
+                        checked={codes.includes(c.code)}
+                        onChange={() => toggleCode(c.code)}
+                      />
+                      <b>{c.code}</b> {c.title}
+                    </label>
+                  ))}
+                </fieldset>
+              ))}
+            </div>
+            <label>
+              Где указаны коды (ссылка на страницу)
+              <input
+                value={codesUrl}
+                onChange={(e) => setCodesUrl(e.target.value)}
+                placeholder="https://site.ru/about"
+              />
+            </label>
+            {codeSegment ? (
+              <p className="codes-result">
+                Сегмент по кодам: <b>{codeSegment}</b> ·{" "}
+                {codes.map((c) => codeInfo(c)?.code ?? c).join(", ")}
+              </p>
+            ) : (
+              <small className="codes-hint">
+                Кодов нет — выберите сегмент по описанию услуг, он будет помечен
+                «по описанию».
+              </small>
+            )}
             <label>
               Основной сегмент
               <select
-                value={segment}
+                value={codeSegment || segment}
+                disabled={Boolean(codeSegment)}
                 onChange={(e) => setSegment(e.target.value)}
               >
                 {segments.map((x) => (
@@ -721,6 +784,9 @@ function CandidateDrawer({
             ["Дата аккредитации", item.decision],
             ["Источник", "Реестр Минцифры, срез 03.11.2026"],
             ["Сотрудников", item.headcount === null ? "нет данных" : item.headcount.toLocaleString("ru-RU")],
+            ["Коды Минцифры", item.itCodes.length ? item.itCodes.join(", ") : "не указаны"],
+            ["Основание сегмента", item.segmentSource === "codes" ? "коды на сайте" : item.segmentSource === "description" ? "по описанию услуг" : "—"],
+            ...(item.segmentLegacy ? [["Сегмент по старому списку", item.segmentLegacy]] : []),
             ["Уверенность", item.confidence],
           ].map(([a, b]) => (
             <div key={a}>
