@@ -43,6 +43,10 @@ type Candidate = {
   segmentSource: "codes" | "description" | null;
   codesUrl: string;
   segmentLegacy: string;
+  primaryCode: string;
+  logoFlags: string[];
+  siteStatus: string;
+  siteNote: string;
 };
 type DbRow = {
   inn: string;
@@ -69,10 +73,14 @@ type DbRow = {
   segment_source: "codes" | "description" | null;
   codes_found_url: string | null;
   segment_legacy: string | null;
+  primary_code: string | null;
+  logo_flags: string[] | null;
+  site_status: string | null;
+  site_note: string | null;
   created_at: string;
 };
 const columns =
-  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,created_at";
+  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,primary_code,logo_flags,site_status,site_note,created_at";
 
 const tidyName = (name: string) =>
   name
@@ -112,6 +120,10 @@ const toCandidate = (x: DbRow): Candidate => ({
   segmentSource: x.segment_source,
   codesUrl: x.codes_found_url || "",
   segmentLegacy: x.segment_legacy || "",
+  primaryCode: x.primary_code || "",
+  logoFlags: x.logo_flags || [],
+  siteStatus: x.site_status || "",
+  siteNote: x.site_note || "",
 });
 const toDb = (x: Candidate) => ({
   brand: x.brand,
@@ -125,9 +137,19 @@ const toDb = (x: Candidate) => ({
   it_codes: x.itCodes,
   segment_source: x.segmentSource,
   codes_found_url: x.codesUrl || null,
+  primary_code: x.primaryCode || null,
+  logo_flags: x.logoFlags,
   updated_at: new Date().toISOString(),
 });
 const logo = (x: Candidate) => x.customLogo || placeholder;
+const siteStatusLabel: Record<string, string> = {
+  ok: "открылся, ИНН совпадает",
+  other_inn: "на сайте другой ИНН",
+  no_inn: "ИНН на сайте не найден",
+  unreachable: "не открывается",
+  cert_error: "российский сертификат — нужен ручной просмотр",
+  domain_lost: "домен занят посторонним сайтом",
+};
 const needsLogo = (x: Candidate) => x.logoStatus !== "ready";
 const needsClass = (x: Candidate) => x.classificationStatus !== "ready";
 
@@ -392,7 +414,7 @@ export function RegistryPilot() {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className="candidate-pic">
+                <div className={x.logoFlags.includes("inverted") ? "candidate-pic dark" : "candidate-pic"}>
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
@@ -407,7 +429,7 @@ export function RegistryPilot() {
                   {x.segment !== "Не определено" && (
                     <small className="candidate-segment-line" title={x.itCodes.join(", ")}>
                       {x.segment}
-                      {x.itCodes.length ? ` · ${x.itCodes.length} код.` : " · по описанию"}
+                      {x.primaryCode ? ` · ${x.primaryCode}` : x.itCodes.length ? ` · ${x.itCodes.length} код.` : " · по описанию"}
                     </small>
                   )}
                   <div>
@@ -469,6 +491,8 @@ function CandidateDrawer({
     [segment, setSegment] = useState(item.segment),
     [codes, setCodes] = useState<string[]>(item.itCodes),
     [codesUrl, setCodesUrl] = useState(item.codesUrl),
+    [primaryCode, setPrimaryCode] = useState(item.primaryCode),
+    [logoFlags, setLogoFlags] = useState<string[]>(item.logoFlags),
     [tags, setTags] = useState(item.tags.join(", ")),
     [customLogo, setCustomLogo] = useState(item.customLogo || ""),
     [logoConfirmed, setLogoConfirmed] = useState(
@@ -482,6 +506,8 @@ function CandidateDrawer({
     setSegment(item.segment);
     setCodes(item.itCodes);
     setCodesUrl(item.codesUrl);
+    setPrimaryCode(item.primaryCode);
+    setLogoFlags(item.logoFlags);
     setTags(item.tags.join(", "));
     setCustomLogo(item.customLogo || "");
     setLogoConfirmed(item.logoStatus === "ready");
@@ -502,10 +528,18 @@ function CandidateDrawer({
     };
     reader.readAsDataURL(file);
   }
-  const codeSegment = primarySegment(codes);
+  const activePrimary = codes.includes(primaryCode) ? primaryCode : "";
+  const codeSegment = activePrimary
+    ? codeInfo(activePrimary)?.segment ?? null
+    : primarySegment(codes);
   function toggleCode(code: string) {
     setCodes((current) =>
       current.includes(code) ? current.filter((c) => c !== code) : [...current, code],
+    );
+  }
+  function toggleFlag(flag: string) {
+    setLogoFlags((current) =>
+      current.includes(flag) ? current.filter((f) => f !== flag) : [...current, flag],
     );
   }
   async function submit(e: React.FormEvent) {
@@ -525,6 +559,8 @@ function CandidateDrawer({
       segment: codeSegment || segment,
       itCodes: codes,
       codesUrl,
+      primaryCode: activePrimary,
+      logoFlags,
       segmentSource: (codeSegment
         ? "codes"
         : segment && segment !== "Не определено"
@@ -568,7 +604,7 @@ function CandidateDrawer({
         <button className="close" onClick={close}>
           <X />
         </button>
-        <div className="candidate-detail-logo">
+        <div className={logoFlags.includes("inverted") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
           <img src={customLogo || logo(item)} alt={item.brand} />
         </div>
         <span
@@ -627,26 +663,56 @@ function CandidateDrawer({
               />
               Подтверждаю, что это официальный логотип
             </label>
+            <label className="confirm-check">
+              <input
+                type="checkbox"
+                checked={logoFlags.includes("inverted")}
+                onChange={() => toggleFlag("inverted")}
+              />
+              Версия для тёмного фона (цветной на сайте нет)
+            </label>
+            <label className="confirm-check">
+              <input
+                type="checkbox"
+                checked={logoFlags.includes("parent_brand")}
+                onChange={() => toggleFlag("parent_brand")}
+              />
+              В связке с материнским брендом
+            </label>
           </div>
           <div className="work-section">
             <b>Классификация по перечню Минцифры (приказ № 449)</b>
             <small className="codes-hint">
-              Отметьте коды, указанные на сайте компании. Сегмент считается по
-              кодам автоматически.
+              Отметьте все коды, указанные на сайте, и выберите основной — тот,
+              что лучше всего описывает главный бизнес компании. Сегмент
+              берётся по основному коду.
             </small>
             <div className="codes-list">
               {SEGMENTS.map((seg) => (
                 <fieldset key={seg}>
                   <legend>{seg}</legend>
                   {IT_CODES.filter((c) => c.segment === seg).map((c) => (
-                    <label key={c.code} className="code-check">
-                      <input
-                        type="checkbox"
-                        checked={codes.includes(c.code)}
-                        onChange={() => toggleCode(c.code)}
-                      />
-                      <b>{c.code}</b> {c.title}
-                    </label>
+                    <div key={c.code} className="code-row">
+                      <label className="code-check">
+                        <input
+                          type="checkbox"
+                          checked={codes.includes(c.code)}
+                          onChange={() => toggleCode(c.code)}
+                        />
+                        <b>{c.code}</b> {c.title}
+                      </label>
+                      {codes.includes(c.code) && (
+                        <label className="code-primary" title="Основной вид деятельности">
+                          <input
+                            type="radio"
+                            name="primary-code"
+                            checked={activePrimary === c.code}
+                            onChange={() => setPrimaryCode(c.code)}
+                          />
+                          основной
+                        </label>
+                      )}
+                    </div>
                   ))}
                 </fieldset>
               ))}
@@ -661,7 +727,8 @@ function CandidateDrawer({
             </label>
             {codeSegment ? (
               <p className="codes-result">
-                Сегмент по кодам: <b>{codeSegment}</b> ·{" "}
+                {activePrimary ? `Основной код ${activePrimary} → ` : "Основной код не выбран, сегмент по большинству кодов → "}
+                <b>{codeSegment}</b> · все коды:{" "}
                 {codes.map((c) => codeInfo(c)?.code ?? c).join(", ")}
               </p>
             ) : (
@@ -784,7 +851,10 @@ function CandidateDrawer({
             ["Дата аккредитации", item.decision],
             ["Источник", "Реестр Минцифры, срез 03.11.2026"],
             ["Сотрудников", item.headcount === null ? "нет данных" : item.headcount.toLocaleString("ru-RU")],
+            ["Сайт", siteStatusLabel[item.siteStatus] || "не проверялся"],
+            ...(item.siteNote ? [["Заметка", item.siteNote]] : []),
             ["Коды Минцифры", item.itCodes.length ? item.itCodes.join(", ") : "не указаны"],
+            ["Основной код", item.primaryCode || "—"],
             ["Основание сегмента", item.segmentSource === "codes" ? "коды на сайте" : item.segmentSource === "description" ? "по описанию услуг" : "—"],
             ...(item.segmentLegacy ? [["Сегмент по старому списку", item.segmentLegacy]] : []),
             ["Уверенность", item.confidence],
