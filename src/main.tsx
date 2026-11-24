@@ -19,6 +19,7 @@ import { useCatalogLogos } from "./remote";
 import { UploadWorkflow } from "./upload";
 import { ReviewQueue } from "./review";
 import { Methodology } from "./methodology";
+import { ScannerCheck } from "./scanner-check";
 import { AnalyticsDashboardV2 } from "./analytics-v2";
 import { RegistryPilot } from "./registry-pilot";
 import type { Logo } from "./types";
@@ -190,7 +191,7 @@ function App() {
         {page === "Кандидаты" && <RegistryPilot />}
         {page === "Загрузка" && <UploadWorkflow />}
         {page === "Разметка" && <ReviewQueue />}
-        {page === "Методика" && <Methodology />}
+        {page === "Методика" && (<><Methodology /><ScannerCheck /></>)}
         {page === "Доступ" && <Access />}
       </main>
       {selected && (
