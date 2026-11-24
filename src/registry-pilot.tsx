@@ -186,12 +186,48 @@ async function storeAndScan(item: Candidate): Promise<{ palette: PaletteColor[];
   return { palette, paletteType, storagePath: path, scan };
 }
 
+/** Пометки по результату сканера: белый на прозрачном, низкое разрешение, ничья долей. */
+function autoFlags(scan: ScanResult, current: string[]): string[] {
+  const flags = new Set(current.filter((f) => !["inverted_auto", "low_res", "tie"].includes(f)));
+  const white = scan.family_share?.["белый"] ?? 0;
+  if (scan.background === "прозрачный" && white >= 0.6 && !flags.has("inverted")) flags.add("inverted_auto");
+  if (scan.flags.includes("низкое разрешение")) flags.add("low_res");
+  const c = scan.colors ?? [];
+  if (c.length >= 2 && c[0].share >= 0.2 && Math.abs(c[0].share - c[1].share) < 0.005 && c[0].family !== c[1].family) flags.add("tie");
+  return [...flags];
+}
+/** Предварительный прогон сканера по копии логотипа в хранилище — ради пометок для проверки. */
+async function prescan(inn: string): Promise<void> {
+  if (!supabase) return;
+  const { data: row } = await supabase.from("registry_companies").select("logo_storage_path,logo_flags").eq("inn", inn).maybeSingle();
+  const r = row as { logo_storage_path: string | null; logo_flags: string[] | null } | null;
+  if (!r?.logo_storage_path) return;
+  const { data: signed } = await supabase.storage.from("candidate-logos").createSignedUrl(r.logo_storage_path, 600);
+  if (!signed) return;
+  const scan = await scanUrl(signed.signedUrl);
+  if (scan.error) {
+    await supabase.from("registry_companies").update({ logo_flags: [...(r.logo_flags ?? []), "no_mark"] }).eq("inn", inn);
+    return;
+  }
+  await supabase.from("registry_companies").update({
+    palette: (scan.colors ?? []).map((c) => ({ name: c.family, hex: c.hex.toUpperCase(), share: c.share })),
+    palette_type: capitalize(scan.palette_type ?? "одноцветный"),
+    color_scan: scan, color_scanned_at: new Date().toISOString(), color_scanner: SCANNER_VERSION + "-prelim",
+    logo_flags: autoFlags(scan, r.logo_flags ?? []),
+  }).eq("inn", inn);
+}
+export const FLAG_LABEL: Record<string, string> = {
+  inverted: "для тёмного фона", inverted_auto: "белый — показан на тёмном", parent_brand: "с материнским брендом",
+  low_res: "низкое разрешение", tie: "ничья долей цветов", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
+};
+
 const siteStatusLabel: Record<string, string> = {
   ok: "открылся, ИНН совпадает",
   other_inn: "на сайте другой ИНН",
   no_inn: "ИНН на сайте не найден",
   unreachable: "не открывается",
   cert_error: "российский сертификат — нужен ручной просмотр",
+  needs_browser: "сайт собирается в браузере — нужен проход через Chrome",
   domain_lost: "домен занят посторонним сайтом",
 };
 const needsLogo = (x: Candidate) => x.logoStatus !== "ready";
@@ -224,13 +260,14 @@ const paletteTypes: Candidate["paletteType"][] = [
 ];
 // Старые правки, сделанные до переезда в базу, хранились только в этом браузере
 const legacyKey = "prcindex-candidate-work-v3";
-type Queue = "main" | "logo" | "classification";
-type Counts = { total: number; site: number; ready: number; logo: number; classification: number };
+type Queue = "main" | "logo" | "classification" | "review";
+type Counts = { total: number; site: number; ready: number; logo: number; classification: number; review: number };
 const pageSize = 100;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyQueue(query: any, queue: Queue) {
   if (queue === "logo") return query.neq("logo_status", "ready");
+  if (queue === "review") return query.eq("logo_status", "needs_check").not("logo_storage_path", "is", null);
   if (queue === "classification") return query.eq("classification_status", "needs");
   return query.eq("logo_status", "ready").eq("classification_status", "ready");
 }
@@ -258,14 +295,15 @@ export function RegistryPilot() {
     if (!supabase) return;
     const db = supabase;
     const head = () => db.from("registry_companies").select("inn", { count: "exact", head: true });
-    const [total, site, ready, logoQ, classQ] = await Promise.all([
+    const [total, site, ready, logoQ, classQ, reviewQ] = await Promise.all([
       head(),
       head().not("website", "is", null),
       applyQueue(head(), "main"),
       applyQueue(head(), "logo"),
       applyQueue(head(), "classification"),
+      applyQueue(head(), "review"),
     ]);
-    const failed = [total, site, ready, logoQ, classQ].find((x) => x.error);
+    const failed = [total, site, ready, logoQ, classQ, reviewQ].find((x) => x.error);
     if (failed) throw failed.error;
     setCounts({
       total: total.count ?? 0,
@@ -273,6 +311,7 @@ export function RegistryPilot() {
       ready: ready.count ?? 0,
       logo: logoQ.count ?? 0,
       classification: classQ.count ?? 0,
+      review: reviewQ.count ?? 0,
     });
   }, []);
 
@@ -391,14 +430,14 @@ export function RegistryPilot() {
         else {
           stat[r!.site_status ?? "?"] = (stat[r!.site_status ?? "?"] ?? 0) + 1;
           if (r!.codes?.length) codes++;
-          if (r!.logo) logos++;
+          if (r!.logo) { logos++; try { await prescan(it.inn); } catch { /* пометки не критичны */ } }
         }
         done++;
         setBatch(`Собираем сайты: ${done} из 50…`);
       }
     };
     await Promise.all([worker(), worker(), worker()]);
-    const label: Record<string, string> = { ok: "свой сайт", other_inn: "чужой ИНН", no_inn: "ИНН не найден", unreachable: "не открылся", cert_error: "сертификат", domain_lost: "домен потерян" };
+    const label: Record<string, string> = { ok: "свой сайт", other_inn: "чужой ИНН", no_inn: "ИНН не найден", unreachable: "не открылся", cert_error: "сертификат", domain_lost: "домен потерян", needs_browser: "нужен браузер" };
     setBatch(
       `Готово: ${done} сайтов. ` + Object.entries(stat).map(([k, v]) => `${label[k] ?? k} — ${v}`).join(", ") +
       `. Логотип найден у ${logos}, коды Минцифры — у ${codes}.` + (failed.length ? ` Ошибки: ${failed.join("; ")}` : ""),
@@ -425,6 +464,17 @@ export function RegistryPilot() {
     }
     setBatch(`Готово: цвет определён у ${ok} из ${list.length}.` + (failed.length ? ` Не получилось: ${failed.join("; ")}` : ""));
     await Promise.all([loadCounts(), loadPage()]);
+  }
+  async function reviewLogo(x: Candidate, ok: boolean) {
+    if (!supabase) return;
+    const patch = ok
+      ? { logo_status: "ready", logo_flags: x.logoFlags.filter((f) => f !== "rejected"), updated_at: new Date().toISOString() }
+      : { logo_status: "needs_search", logo_flags: [...new Set([...x.logoFlags, "rejected"])], logo_url: null, logo_storage_path: null,
+          palette: null, palette_type: null, color_scan: null, color_scanned_at: null, updated_at: new Date().toISOString() };
+    const { error: e } = await supabase.from("registry_companies").update(patch).eq("inn", x.inn);
+    if (e) { setError(e.message); return; }
+    setItems((cur) => cur.filter((y) => y.inn !== x.inn));
+    void loadCounts();
   }
   const selected = items.find((x) => x.inn === selectedInn) ?? null;
   async function save(item: Candidate) {
@@ -456,6 +506,10 @@ export function RegistryPilot() {
     classification: [
       "Требуется классификация",
       "Уточните сегмент, специализации и цветовую разметку",
+    ],
+    review: [
+      "Проверка логотипов",
+      "Логотип найден автоматически: «Верно» — подтвердить, «Не тот» — отправить на повторный поиск",
     ],
   } as const;
   return (
@@ -500,6 +554,14 @@ export function RegistryPilot() {
           <b>{fmt(counts?.classification)}</b>
           <span>требуется классификация</span>
         </button>
+        <button
+          className={queue === "review" ? "active" : ""}
+          onClick={() => setQueue("review")}
+        >
+          <CheckCircle2 />
+          <b>{fmt(counts?.review)}</b>
+          <span>проверка логотипов</span>
+        </button>
       </div>
       <label className="registry-search">
         <Search size={16} />
@@ -538,13 +600,24 @@ export function RegistryPilot() {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className={x.logoFlags.includes("inverted") ? "candidate-pic dark" : "candidate-pic"}>
+                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-pic dark" : "candidate-pic"}>
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
                   )}
                   {!needsLogo(x) && needsClass(x) && <span>классифицировать</span>}
                 </div>
+                {x.logoFlags.filter((f) => FLAG_LABEL[f] && f !== "rejected").length > 0 && (
+                  <div className="candidate-flags">
+                    {x.logoFlags.filter((f) => FLAG_LABEL[f] && f !== "rejected").map((f) => <i key={f}>{FLAG_LABEL[f]}</i>)}
+                  </div>
+                )}
+                {queue === "review" && (
+                  <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
+                    <button className="ok" onClick={() => reviewLogo(x, true)}>Верно</button>
+                    <button className="bad" onClick={() => reviewLogo(x, false)}>Не тот</button>
+                  </div>
+                )}
                 <div className="candidate-meta">
                   <b>{x.brand}</b>
                   <small>
@@ -741,7 +814,7 @@ function CandidateDrawer({
         <button className="close" onClick={close}>
           <X />
         </button>
-        <div className={logoFlags.includes("inverted") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
+        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
           <img src={customLogo || logo(item)} alt={item.brand} />
         </div>
         <span

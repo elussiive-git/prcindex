@@ -74,38 +74,64 @@ function suggestPrimary(codes: string[]): string | null {
 }
 
 type LogoPick = { kind: "url" | "svg"; value: string; why: string; flags: string[] };
+const JUNK = /(lang|language|globe|earth|world|flag|icon-|ico[-_]|burger|hamburger|menu|search|close|arrow|chevron|phone|mail|cart|user|profile|social|vk[-_.]|vkontakte|telegram|tg[-_.]|whatsapp|youtube|rutube|dzen|habr|instagram|facebook|twitter|ok[-_.]ru|loader|spinner|preload|placeholder|blank|pixel|spacer|captcha|banner|slide|hero|bg[-_.]|background|qr)/i;
+const PLACEHOLDER = /^data:image\/(gif|png);base64,(R0lGOD|iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB)|^data:image\/svg\+xml.{0,60}%3C\/svg%3E$/i;
 function pickLogo(doc: ReturnType<DOMParser["parseFromString"]>, base: URL): LogoPick | null {
   if (!doc) return null;
   const abs = (u: string) => { try { return new URL(u, base).href; } catch { return ""; } };
   const srcOf = (img: Element) => {
-    const s = img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-original") || "";
-    const set = img.getAttribute("srcset") || img.getAttribute("data-srcset");
-    if ((!s || s.startsWith("data:image/gif") || s.startsWith("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB")) && set) return set.split(",")[0].trim().split(" ")[0];
-    return s;
+    const lazy = img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-original") || img.getAttribute("data-lazy") || "";
+    const s = img.getAttribute("src") || "";
+    const set = img.getAttribute("srcset") || img.getAttribute("data-srcset") || "";
+    if (lazy) return lazy;
+    if (s && !PLACEHOLDER.test(s)) return s;
+    return set ? set.split(",").map((x) => x.trim().split(" ")[0]).pop() || "" : "";
   };
-  const flagsFor = (s: string) => (/(white|_w\.|-w\.|_wh|light|inverse|negativ|_neg|-neg|belyj|beliy)/i.test(s) ? ["inverted"] : []);
-  const selectors = [
-    "header a[href='/'] img", "header a[href='/'] svg", "a[href='/'] img", "a[href='/'] svg",
-    "header [class*='logo' i] img", "header img[class*='logo' i]", "header img[src*='logo' i]", "header [class*='logo' i] svg", "header svg[class*='logo' i]",
-    "[class*='logo' i] img", "img[class*='logo' i]", "img[src*='logo' i]", "img[alt*='logo' i]", "img[alt*='лого' i]",
-    "[class*='logo' i] svg", "svg[class*='logo' i]", "[id*='logo' i] img", "[id*='logo' i] svg", "header img", "header svg",
-  ];
-  for (const sel of selectors) {
-    let nodes: Element[] = [];
-    try { nodes = [...doc.querySelectorAll(sel)] as Element[]; } catch { continue; }
-    for (const el of nodes) {
-      if (el.tagName.toLowerCase() === "img") {
-        const s = srcOf(el);
-        if (!s || /sprite|icon-|ico_|burger|menu|search|close|arrow|flag|lang|phone|mail/i.test(s)) continue;
-        const u = s.startsWith("data:") ? s : abs(s);
-        if (u) return { kind: "url", value: u, why: sel, flags: flagsFor(s) };
-      } else {
-        const svg = el.outerHTML;
-        if (svg.length < 300 || /<use\b/i.test(svg) && svg.length < 600) continue; // иконки и ссылки на спрайт
-        return { kind: "svg", value: svg, why: sel, flags: [] };
+  const describe = (el: Element) =>
+    [el.getAttribute("src"), el.getAttribute("data-src"), el.getAttribute("alt"), el.getAttribute("class"), el.getAttribute("id"),
+     el.parentElement?.getAttribute("class"), el.parentElement?.getAttribute("aria-label")].filter(Boolean).join(" ");
+  const flagsFor = (s: string) => (/(white|_w\.|-w\.|_wh|light|inverse|negativ|_neg|-neg|belyj|beliy|_inv)/i.test(s) ? ["inverted"] : []);
+  const isRootLink = (a: Element | null) => {
+    if (!a) return false;
+    const h = (a.getAttribute("href") || "").trim();
+    if (!h) return false;
+    try { const u = new URL(h, base); return u.host === base.host && (u.pathname === "/" || u.pathname === "" || /^\/(index|main|home)(\.\w+)?$/i.test(u.pathname)); } catch { return false; }
+  };
+  const fromEl = (el: Element, why: string): LogoPick | null => {
+    const d = describe(el);
+    if (el.tagName.toLowerCase() === "img") {
+      const s = srcOf(el);
+      if (!s || PLACEHOLDER.test(s) || (JUNK.test(d) && !/logo|лого/i.test(d))) return null;
+      const w = Number(el.getAttribute("width") || 0), h = Number(el.getAttribute("height") || 0);
+      if ((w && w < 24) || (h && h < 12)) return null;
+      const u = s.startsWith("data:") ? s : abs(s);
+      return u ? { kind: "url", value: u, why, flags: flagsFor(d) } : null;
+    }
+    const svg = el.outerHTML;
+    if (svg.length < 300 || (/<use\b/i.test(svg) && svg.length < 800)) return null;
+    if (JUNK.test(d) && !/logo|лого/i.test(d)) return null;
+    return { kind: "svg", value: svg, why, flags: flagsFor(d) };
+  };
+  const all = (sel: string) => { try { return [...doc.querySelectorAll(sel)] as Element[]; } catch { return [] as Element[]; } };
+  // 1) картинка/svg внутри ссылки на главную в шапке — самый надёжный признак логотипа
+  for (const scope of ["header", "[class*='header' i]", "nav", "body"]) {
+    for (const a of all(`${scope} a[href]`)) {
+      if (!isRootLink(a)) continue;
+      for (const el of [...a.querySelectorAll("img, svg")] as Element[]) {
+        const p = fromEl(el, `ссылка на главную (${scope})`);
+        if (p) return p;
       }
     }
   }
+  // 2) элементы с «logo» в классе/имени файла/alt
+  const selectors = [
+    "header [class*='logo' i] img", "header img[class*='logo' i]", "header img[src*='logo' i]", "header [class*='logo' i] svg", "header svg[class*='logo' i]",
+    "[class*='logo' i] img", "img[class*='logo' i]", "img[src*='logo' i]", "img[alt*='logo' i]", "img[alt*='лого' i]",
+    "[class*='logo' i] svg", "svg[class*='logo' i]", "[id*='logo' i] img", "[id*='logo' i] svg",
+  ];
+  for (const sel of selectors) for (const el of all(sel)) { const p = fromEl(el, sel); if (p) return p; }
+  // 3) первая крупная картинка в шапке
+  for (const el of all("header img, header svg")) { const p = fromEl(el, "первая картинка шапки"); if (p) return p; }
   const icon = doc.querySelector("link[rel~='icon'][type='image/svg+xml']") || doc.querySelector("link[rel='apple-touch-icon']");
   const href = icon?.getAttribute("href");
   if (href) return { kind: "url", value: abs(href), why: "иконка сайта (запасной вариант)", flags: ["site_icon"] };
@@ -185,11 +211,13 @@ Deno.serve(async (req) => {
     let codes: string[] = [], codesUrl: string | null = null;
     for (const p of pages) { const c = findCodes(p.text); if (c.length > codes.length) { codes = c; codesUrl = p.url; } }
     const lost = !innPage && /(казино|casino|ставк[аи] на спорт|букмекер|слоты|онлайн-займ|продается домен|domain is for sale|продаётся домен)/i.test(mainText);
-    patch.site_status = innPage ? "ok" : lost ? "domain_lost" : otherInn ? "other_inn" : "no_inn";
+    const thin = mainText.length < 600 || /enable javascript|включите javascript|<div id="(root|app|__next)">\s*<\/div>/i.test(html);
+    log.text_len = mainText.length;
+    patch.site_status = innPage ? "ok" : lost ? "domain_lost" : otherInn ? "other_inn" : thin ? "needs_browser" : "no_inn";
     const notes: string[] = [];
     if (otherInn) notes.push(`На сайте ИНН ${otherInn}.`);
     if (lost) notes.push("Домен занят посторонним сайтом.");
-    if (mainText.length < 400) notes.push("На главной почти нет текста — возможно, сайт собирается в браузере; проверить вручную.");
+    if (thin && !innPage) notes.push("Сервер получил почти пустую страницу — сайт собирается в браузере, нужен проход через Chrome.");
 
     // коды присваиваем только если сайт принадлежит компании (ИНН совпал)
     if (innPage && codes.length) {
