@@ -9,3 +9,4 @@ work/logos-snapshot.tgz
 *.tsbuildinfo
 
 work/repo-snapshot.tgz
+__pycache__/
