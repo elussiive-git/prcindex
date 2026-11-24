@@ -1,0 +1,327 @@
+[
+ {
+  "name": "ООО «ТЦР»",
+  "brand": "Sage Observability",
+  "inn": "7743180892",
+  "ogrn": "5167746308549",
+  "registry": "6663",
+  "decision": "29.12.2016",
+  "decisionNumber": "№ 732",
+  "headcount": 8108,
+  "website": "https://sageobservability.ru",
+  "segment": "Собственные программные продукты / SaaS",
+  "tags": [
+   "наблюдаемость",
+   "мониторинг",
+   "ИТ-инфраструктура"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Платформа наблюдаемости для мониторинга программного обеспечения и ИТ-инфраструктуры.",
+  "evidenceUrl": "https://sage-observability.tech/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "фиолетовый",
+    "hex": "#6755E7"
+   }
+  ],
+  "paletteType": "Одноцветный",
+  "logoDomain": "sage-observability.tech",
+  "logoStatus": "Требуется поиск"
+ },
+ {
+  "name": "ООО «Совкомбанк Технологии»",
+  "brand": "Совкомбанк Технологии",
+  "inn": "4400001172",
+  "ogrn": "1214400000760",
+  "registry": "14253",
+  "decision": "15.06.2021",
+  "decisionNumber": "№ 566",
+  "headcount": 6296,
+  "website": "https://sovcombank.it",
+  "segment": "Корпоративное ИТ-подразделение",
+  "tags": [
+   "финтех",
+   "мобильная разработка",
+   "веб-разработка"
+  ],
+  "confidence": "Высокая",
+  "evidence": "ИТ-компания группы Совкомбанк создаёт и развивает банковские сервисы и приложения.",
+  "evidenceUrl": "https://sovcombank.it/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "красный",
+    "hex": "#E53935"
+   }
+  ],
+  "paletteType": "Одноцветный",
+  "logoDomain": "sovcombank.it"
+ },
+ {
+  "name": "ООО «Компания «Тензор»",
+  "brand": "Тензор / Saby",
+  "inn": "7605016030",
+  "ogrn": "1027600787994",
+  "registry": "484",
+  "decision": "30.11.2010",
+  "decisionNumber": "№ 325",
+  "headcount": 6112,
+  "website": "https://tensor.ru",
+  "segment": "Собственные программные продукты / SaaS",
+  "tags": [
+   "корпоративное ПО",
+   "ЭДО",
+   "автоматизация бизнеса"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Saby — собственная экосистема цифровых сервисов для автоматизации бизнеса.",
+  "evidenceUrl": "https://tensor.ru/about",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "синий",
+    "hex": "#2864DC"
+   },
+   {
+    "name": "оранжевый",
+    "hex": "#F28A2E"
+   }
+  ],
+  "paletteType": "Двухцветный",
+  "logoDomain": "tensor.ru"
+ },
+ {
+  "name": "ООО «ИТМ»",
+  "brand": "ИТМ",
+  "inn": "2311168514",
+  "ogrn": "1142311001744",
+  "registry": "3486",
+  "decision": "31.03.2014",
+  "decisionNumber": "№ 70",
+  "headcount": 4735,
+  "website": "https://itmtec.ru",
+  "segment": "Корпоративное ИТ-подразделение",
+  "tags": [
+   "ритейл",
+   "мобильная разработка",
+   "корпоративное ПО"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Компания создаёт программные решения для цифровой инфраструктуры ритейла, включая мобильные приложения.",
+  "evidenceUrl": "https://itmmagnit.ru/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "красный",
+    "hex": "#E30613"
+   }
+  ],
+  "paletteType": "Одноцветный",
+  "logoDomain": "itmmagnit.ru",
+  "logoStatus": "Требуется поиск"
+ },
+ {
+  "name": "ООО «Авито Тех»",
+  "brand": "Авито Тех",
+  "inn": "9710089440",
+  "ogrn": "1217700216403",
+  "registry": "14330",
+  "decision": "01.07.2021",
+  "decisionNumber": "№ 673",
+  "headcount": 4123,
+  "website": "https://hrmka.ru",
+  "segment": "Корпоративное ИТ-подразделение",
+  "tags": [
+   "маркетплейс",
+   "собственные продукты",
+   "данные и ИИ"
+  ],
+  "confidence": "Средняя",
+  "evidence": "Домен связан с товарным знаком ООО «Авито Тех», но не представляет всю деятельность компании.",
+  "evidenceUrl": "https://hrmka.ru",
+  "status": "Проверить источник",
+  "palette": [
+   {
+    "name": "синий",
+    "hex": "#00AAFF"
+   },
+   {
+    "name": "зелёный",
+    "hex": "#97CF26"
+   },
+   {
+    "name": "красный",
+    "hex": "#FF6163"
+   },
+   {
+    "name": "фиолетовый",
+    "hex": "#A169F7"
+   }
+  ],
+  "paletteType": "Многоцветный",
+  "logoDomain": "avito.ru",
+  "classificationStatus": "Требуется классификация"
+ },
+ {
+  "name": "ООО «Сервионика»",
+  "brand": "Сервионика",
+  "inn": "7727790940",
+  "ogrn": "1127747102988",
+  "registry": "5059",
+  "decision": "20.04.2015",
+  "decisionNumber": "№ 117",
+  "headcount": 3847,
+  "website": "http://servionica.ru",
+  "segment": "ИТ-консалтинг и аутсорсинг",
+  "tags": [
+   "техническая поддержка",
+   "ИТ-инфраструктура",
+   "сервис"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Компания называет себя провайдером полного спектра услуг ИТ-аутсорсинга.",
+  "evidenceUrl": "https://www.servionica.ru/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "синий",
+    "hex": "#2364A8"
+   },
+   {
+    "name": "бирюзовый",
+    "hex": "#31B7E9"
+   }
+  ],
+  "paletteType": "Двухцветный",
+  "logoDomain": "servionica.ru"
+ },
+ {
+  "name": "АО «Гипротрубопровод»",
+  "brand": "Гипротрубопровод",
+  "inn": "7710022410",
+  "ogrn": "1027700002660",
+  "registry": "31542",
+  "decision": "11.11.2022",
+  "decisionNumber": "АО-20221102-9708573368-3",
+  "headcount": 3194,
+  "website": "https://giprotruboprovod.transneft.ru",
+  "segment": "Другое",
+  "tags": [
+   "инженерное проектирование",
+   "корпоративные системы"
+  ],
+  "confidence": "Средняя",
+  "evidence": "Основная деятельность — проектирование трубопроводов; ИТ является обеспечивающим направлением.",
+  "evidenceUrl": "https://giprotruboprovod.transneft.ru/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "синий",
+    "hex": "#006BB6"
+   }
+  ],
+  "paletteType": "Одноцветный",
+  "logoDomain": "transneft.ru",
+  "logoStatus": "Требуется поиск"
+ },
+ {
+  "name": "ООО «Бюджетные и Финансовые Технологии»",
+  "brand": "БФТ-Холдинг",
+  "inn": "7706673610",
+  "ogrn": "1077762072497",
+  "registry": "431",
+  "decision": "11.11.2010",
+  "decisionNumber": "№ 266",
+  "headcount": 2268,
+  "website": "https://bft.ru",
+  "segment": "Разработка корпоративного ПО",
+  "tags": [
+   "госсектор",
+   "собственные продукты",
+   "заказная разработка"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Вендор собственных программных продуктов и заказных решений для государства и бизнеса.",
+  "evidenceUrl": "https://bft.ru/company/about/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "красный",
+    "hex": "#D9343A"
+   },
+   {
+    "name": "белый",
+    "hex": "#FFFFFF"
+   }
+  ],
+  "paletteType": "Двухцветный",
+  "logoDomain": "bft.ru"
+ },
+ {
+  "name": "ООО «Спортмастер Лаб»",
+  "brand": "Спортмастер Лаб",
+  "inn": "7713488827",
+  "ogrn": "1227700243077",
+  "registry": "27615",
+  "decision": "16.05.2022",
+  "decisionNumber": "АО-20220516-4545119877-3",
+  "headcount": 2242,
+  "website": "https://см-лаб.рф",
+  "segment": "Корпоративное ИТ-подразделение",
+  "tags": [
+   "ритейл",
+   "мобильная разработка",
+   "веб-разработка"
+  ],
+  "confidence": "Высокая",
+  "evidence": "ИТ-компания группы Спортмастер развивает сайты, приложения и внутренние продукты.",
+  "evidenceUrl": "https://smlab.digital/",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "синий",
+    "hex": "#2256A4"
+   },
+   {
+    "name": "красный",
+    "hex": "#E41E2B"
+   }
+  ],
+  "paletteType": "Двухцветный",
+  "logoDomain": "smlab.digital"
+ },
+ {
+  "name": "ООО «РСХБ-Интех»",
+  "brand": "РСХБ-Интех",
+  "inn": "7704370385",
+  "ogrn": "1167746822946",
+  "registry": "6562",
+  "decision": "09.12.2016",
+  "decisionNumber": "№ 642",
+  "headcount": 2203,
+  "website": "https://rshb-intech.ru",
+  "segment": "Корпоративное ИТ-подразделение",
+  "tags": [
+   "финтех",
+   "информационная безопасность",
+   "инфраструктура"
+  ],
+  "confidence": "Высокая",
+  "evidence": "Компания обеспечивает технологическую инфраструктуру и разрабатывает решения для Россельхозбанка.",
+  "evidenceUrl": "https://rshb-intech.ru/rshb-intech",
+  "status": "Классифицировано",
+  "palette": [
+   {
+    "name": "чёрный",
+    "hex": "#101010"
+   },
+   {
+    "name": "белый",
+    "hex": "#FFFFFF"
+   }
+  ],
+  "paletteType": "Двухцветный",
+  "logoDomain": "rshb-intech.ru"
+ }
+]

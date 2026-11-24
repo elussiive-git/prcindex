@@ -1,23 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   ImageOff,
   Plus,
+  Search,
   Tags,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
-import registryBatch from "./seed/registry-batch-001.json";
-import researchA from "./seed/registry-research-0000-0259.json";
-import researchB from "./seed/registry-research-0260-0299.json";
-import researchC from "./seed/registry-research-0300-0569.json";
-import researchD from "./seed/registry-research-0570-0599.json";
+import { supabase } from "./auth";
 import "./registry-pilot.css";
 
+// Кандидаты нового корпуса: все действующие компании реестра Минцифры (таблица registry_companies).
+// Данные больше не встраиваются в сборку — грузятся из Supabase постранично и только после входа.
+
 type PaletteColor = { name: string; hex: string };
+type LogoStatus = "needs_search" | "needs_check" | "ready";
 type Candidate = {
   name: string;
   brand: string;
@@ -26,325 +25,95 @@ type Candidate = {
   registry: string;
   decision: string;
   decisionNumber: string;
-  headcount: number;
+  headcount: number | null;
   website: string;
   segment: string;
   tags: string[];
-  confidence: "Высокая" | "Средняя" | "Низкая";
+  confidence: string;
   evidence: string;
   evidenceUrl: string;
-  status: "Классифицировано" | "Проверить источник";
   palette: PaletteColor[];
   paletteType: "Одноцветный" | "Двухцветный" | "Многоцветный";
   logoDomain: string;
-  logoStatus?: "Готово" | "Требуется поиск";
-  classificationStatus?: "Готово" | "Требуется классификация";
+  logoStatus: LogoStatus;
+  classificationStatus: "needs" | "ready";
   customLogo?: string;
 };
-const added = "18.11.2026";
-const pilotCandidates: Candidate[] = [
-  {
-    name: "ООО «ТЦР»",
-    brand: "Sage Observability",
-    inn: "7743180892",
-    ogrn: "5167746308549",
-    registry: "6663",
-    decision: "29.12.2016",
-    decisionNumber: "№ 732",
-    headcount: 8108,
-    website: "https://sageobservability.ru",
-    segment: "Собственные программные продукты / SaaS",
-    tags: ["наблюдаемость", "мониторинг", "ИТ-инфраструктура"],
-    confidence: "Высокая",
-    evidence:
-      "Платформа наблюдаемости для мониторинга программного обеспечения и ИТ-инфраструктуры.",
-    evidenceUrl: "https://sage-observability.tech/",
-    status: "Классифицировано",
-    palette: [{ name: "фиолетовый", hex: "#6755E7" }],
-    paletteType: "Одноцветный",
-    logoDomain: "sage-observability.tech",
-    logoStatus: "Требуется поиск",
-  },
-  {
-    name: "ООО «Совкомбанк Технологии»",
-    brand: "Совкомбанк Технологии",
-    inn: "4400001172",
-    ogrn: "1214400000760",
-    registry: "14253",
-    decision: "15.06.2021",
-    decisionNumber: "№ 566",
-    headcount: 6296,
-    website: "https://sovcombank.it",
-    segment: "Корпоративное ИТ-подразделение",
-    tags: ["финтех", "мобильная разработка", "веб-разработка"],
-    confidence: "Высокая",
-    evidence:
-      "ИТ-компания группы Совкомбанк создаёт и развивает банковские сервисы и приложения.",
-    evidenceUrl: "https://sovcombank.it/",
-    status: "Классифицировано",
-    palette: [{ name: "красный", hex: "#E53935" }],
-    paletteType: "Одноцветный",
-    logoDomain: "sovcombank.it",
-  },
-  {
-    name: "ООО «Компания «Тензор»",
-    brand: "Тензор / Saby",
-    inn: "7605016030",
-    ogrn: "1027600787994",
-    registry: "484",
-    decision: "30.11.2010",
-    decisionNumber: "№ 325",
-    headcount: 6112,
-    website: "https://tensor.ru",
-    segment: "Собственные программные продукты / SaaS",
-    tags: ["корпоративное ПО", "ЭДО", "автоматизация бизнеса"],
-    confidence: "Высокая",
-    evidence:
-      "Saby — собственная экосистема цифровых сервисов для автоматизации бизнеса.",
-    evidenceUrl: "https://tensor.ru/about",
-    status: "Классифицировано",
-    palette: [
-      { name: "синий", hex: "#2864DC" },
-      { name: "оранжевый", hex: "#F28A2E" },
-    ],
-    paletteType: "Двухцветный",
-    logoDomain: "tensor.ru",
-  },
-  {
-    name: "ООО «ИТМ»",
-    brand: "ИТМ",
-    inn: "2311168514",
-    ogrn: "1142311001744",
-    registry: "3486",
-    decision: "31.03.2014",
-    decisionNumber: "№ 70",
-    headcount: 4735,
-    website: "https://itmtec.ru",
-    segment: "Корпоративное ИТ-подразделение",
-    tags: ["ритейл", "мобильная разработка", "корпоративное ПО"],
-    confidence: "Высокая",
-    evidence:
-      "Компания создаёт программные решения для цифровой инфраструктуры ритейла, включая мобильные приложения.",
-    evidenceUrl: "https://itmmagnit.ru/",
-    status: "Классифицировано",
-    palette: [{ name: "красный", hex: "#E30613" }],
-    paletteType: "Одноцветный",
-    logoDomain: "itmmagnit.ru",
-    logoStatus: "Требуется поиск",
-  },
-  {
-    name: "ООО «Авито Тех»",
-    brand: "Авито Тех",
-    inn: "9710089440",
-    ogrn: "1217700216403",
-    registry: "14330",
-    decision: "01.07.2021",
-    decisionNumber: "№ 673",
-    headcount: 4123,
-    website: "https://hrmka.ru",
-    segment: "Корпоративное ИТ-подразделение",
-    tags: ["маркетплейс", "собственные продукты", "данные и ИИ"],
-    confidence: "Средняя",
-    evidence:
-      "Домен связан с товарным знаком ООО «Авито Тех», но не представляет всю деятельность компании.",
-    evidenceUrl: "https://hrmka.ru",
-    status: "Проверить источник",
-    palette: [
-      { name: "синий", hex: "#00AAFF" },
-      { name: "зелёный", hex: "#97CF26" },
-      { name: "красный", hex: "#FF6163" },
-      { name: "фиолетовый", hex: "#A169F7" },
-    ],
-    paletteType: "Многоцветный",
-    logoDomain: "avito.ru",
-    classificationStatus: "Требуется классификация",
-  },
-  {
-    name: "ООО «Сервионика»",
-    brand: "Сервионика",
-    inn: "7727790940",
-    ogrn: "1127747102988",
-    registry: "5059",
-    decision: "20.04.2015",
-    decisionNumber: "№ 117",
-    headcount: 3847,
-    website: "http://servionica.ru",
-    segment: "ИТ-консалтинг и аутсорсинг",
-    tags: ["техническая поддержка", "ИТ-инфраструктура", "сервис"],
-    confidence: "Высокая",
-    evidence:
-      "Компания называет себя провайдером полного спектра услуг ИТ-аутсорсинга.",
-    evidenceUrl: "https://www.servionica.ru/",
-    status: "Классифицировано",
-    palette: [
-      { name: "синий", hex: "#2364A8" },
-      { name: "бирюзовый", hex: "#31B7E9" },
-    ],
-    paletteType: "Двухцветный",
-    logoDomain: "servionica.ru",
-  },
-  {
-    name: "АО «Гипротрубопровод»",
-    brand: "Гипротрубопровод",
-    inn: "7710022410",
-    ogrn: "1027700002660",
-    registry: "31542",
-    decision: "11.11.2022",
-    decisionNumber: "АО-20221102-9708573368-3",
-    headcount: 3194,
-    website: "https://giprotruboprovod.transneft.ru",
-    segment: "Другое",
-    tags: ["инженерное проектирование", "корпоративные системы"],
-    confidence: "Средняя",
-    evidence:
-      "Основная деятельность — проектирование трубопроводов; ИТ является обеспечивающим направлением.",
-    evidenceUrl: "https://giprotruboprovod.transneft.ru/",
-    status: "Классифицировано",
-    palette: [{ name: "синий", hex: "#006BB6" }],
-    paletteType: "Одноцветный",
-    logoDomain: "transneft.ru",
-    logoStatus: "Требуется поиск",
-  },
-  {
-    name: "ООО «Бюджетные и Финансовые Технологии»",
-    brand: "БФТ-Холдинг",
-    inn: "7706673610",
-    ogrn: "1077762072497",
-    registry: "431",
-    decision: "11.11.2010",
-    decisionNumber: "№ 266",
-    headcount: 2268,
-    website: "https://bft.ru",
-    segment: "Разработка корпоративного ПО",
-    tags: ["госсектор", "собственные продукты", "заказная разработка"],
-    confidence: "Высокая",
-    evidence:
-      "Вендор собственных программных продуктов и заказных решений для государства и бизнеса.",
-    evidenceUrl: "https://bft.ru/company/about/",
-    status: "Классифицировано",
-    palette: [
-      { name: "красный", hex: "#D9343A" },
-      { name: "белый", hex: "#FFFFFF" },
-    ],
-    paletteType: "Двухцветный",
-    logoDomain: "bft.ru",
-  },
-  {
-    name: "ООО «Спортмастер Лаб»",
-    brand: "Спортмастер Лаб",
-    inn: "7713488827",
-    ogrn: "1227700243077",
-    registry: "27615",
-    decision: "16.05.2022",
-    decisionNumber: "АО-20220516-4545119877-3",
-    headcount: 2242,
-    website: "https://см-лаб.рф",
-    segment: "Корпоративное ИТ-подразделение",
-    tags: ["ритейл", "мобильная разработка", "веб-разработка"],
-    confidence: "Высокая",
-    evidence:
-      "ИТ-компания группы Спортмастер развивает сайты, приложения и внутренние продукты.",
-    evidenceUrl: "https://smlab.digital/",
-    status: "Классифицировано",
-    palette: [
-      { name: "синий", hex: "#2256A4" },
-      { name: "красный", hex: "#E41E2B" },
-    ],
-    paletteType: "Двухцветный",
-    logoDomain: "smlab.digital",
-  },
-  {
-    name: "ООО «РСХБ-Интех»",
-    brand: "РСХБ-Интех",
-    inn: "7704370385",
-    ogrn: "1167746822946",
-    registry: "6562",
-    decision: "09.12.2016",
-    decisionNumber: "№ 642",
-    headcount: 2203,
-    website: "https://rshb-intech.ru",
-    segment: "Корпоративное ИТ-подразделение",
-    tags: ["финтех", "информационная безопасность", "инфраструктура"],
-    confidence: "Высокая",
-    evidence:
-      "Компания обеспечивает технологическую инфраструктуру и разрабатывает решения для Россельхозбанка.",
-    evidenceUrl: "https://rshb-intech.ru/rshb-intech",
-    status: "Классифицировано",
-    palette: [
-      { name: "чёрный", hex: "#101010" },
-      { name: "белый", hex: "#FFFFFF" },
-    ],
-    paletteType: "Двухцветный",
-    logoDomain: "rshb-intech.ru",
-  },
-];
-type RegistryRow = {
+type DbRow = {
   inn: string;
-  ogrn: string;
+  ogrn: string | null;
+  registry_number: string | null;
   name: string;
-  registry_number: string;
-  decision_date: string;
-  decision_number: string;
-  headcount: number;
-  website: string;
+  decision_date: string | null;
+  decision_number: string | null;
+  headcount: number | null;
+  website: string | null;
+  domain: string | null;
+  brand: string | null;
+  segment: string;
+  tags: string[] | null;
+  confidence: string;
+  evidence: string | null;
+  evidence_url: string | null;
+  palette: PaletteColor[] | null;
+  palette_type: Candidate["paletteType"] | null;
+  logo_url: string | null;
+  logo_status: LogoStatus;
+  classification_status: "needs" | "ready";
+  created_at: string;
 };
+const columns =
+  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,created_at";
+
 const tidyName = (name: string) =>
   name
     .replace(/^ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ\s*/i, "")
     .replace(/^Общество с ограниченной ответственностью\s*/i, "")
+    .replace(/^АКЦИОНЕРНОЕ ОБЩЕСТВО\s*/i, "АО ")
+    .replace(/^ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО\s*/i, "ПАО ")
     .replace(/[«»"]/g, "")
     .trim();
-type ResearchRow={inn:string;logo_file:string|null;segment:string;classification_status:string;confidence:"Высокая"|"Средняя"|"Низкая";tags:string[];matched:string[];palette?:PaletteColor[];paletteType?:Candidate["paletteType"]};
-const research = new Map(
-  ([...(researchA as ResearchRow[]),...(researchB as ResearchRow[]),...(researchC as ResearchRow[]),...(researchD as ResearchRow[])]).map((x) => [x.inn, x]),
-);
-const importedCandidates: Candidate[] = (registryBatch as RegistryRow[]).map(
-  (x) => {
-    const found=research.get(x.inn);
-    return ({
-    name: x.name,
-    brand: tidyName(x.name),
-    inn: x.inn,
-    ogrn: x.ogrn,
-    registry: x.registry_number,
-    decision: new Date(x.decision_date + "T00:00:00").toLocaleDateString(
-      "ru-RU",
-    ),
-    decisionNumber: x.decision_number,
-    headcount: x.headcount,
-    website: x.website,
-    segment: found?.segment||"Не определено",
-    tags: found?.tags||[],
-    confidence: found?.confidence||"Низкая",
-    evidence: found?.matched?.length
-      ? `Автоматическая классификация по официальному сайту. Найдены признаки: ${found.matched.join(", ")}.`
-      : "Карточка автоматически добавлена из реестра. Требуется исследование официального сайта.",
-    evidenceUrl: x.website,
-    status: "Проверить источник",
-    palette: found?.palette||[{ name: "серый", hex: "#9AA0AE" }],
-    paletteType: found?.paletteType||"Одноцветный",
-    logoDomain: new URL(x.website).hostname.replace(/^www\./, ""),
-    customLogo: found?.logo_file||undefined,
-    logoStatus: found?.logo_file?"Готово":"Требуется поиск",
-    classificationStatus: found?.classification_status==="candidate"?"Готово":"Требуется классификация",
-  })},
-);
-const candidates = [...pilotCandidates, ...importedCandidates];
-const logoFiles: Record<string, string> = {
-  "sage-observability.tech": "sage.png",
-  "sovcombank.it": "sovcombank.svg",
-  "tensor.ru": "tensor.png",
-  "itmmagnit.ru": "itm.png",
-  "avito.ru": "avito.png",
-  "servionica.ru": "servionica.png",
-  "transneft.ru": "gipro.png",
-  "bft.ru": "bft.png",
-  "smlab.digital": "smlab.png",
-  "rshb-intech.ru": "rshb.png",
-};
-const logo = (x: Candidate) =>
-  x.customLogo ||
-  `/candidate-logos/${logoFiles[x.logoDomain] || "placeholder.svg"}`;
+const placeholder = "/candidate-logos/placeholder.svg";
+const toCandidate = (x: DbRow): Candidate => ({
+  name: x.name,
+  brand: x.brand || tidyName(x.name),
+  inn: x.inn,
+  ogrn: x.ogrn || "",
+  registry: x.registry_number || "",
+  decision: x.decision_date
+    ? new Date(x.decision_date + "T00:00:00").toLocaleDateString("ru-RU")
+    : "",
+  decisionNumber: x.decision_number || "",
+  headcount: x.headcount,
+  website: x.website || "",
+  segment: x.segment || "Не определено",
+  tags: x.tags || [],
+  confidence: x.confidence || "Низкая",
+  evidence:
+    x.evidence ||
+    "Карточка добавлена из реестра Минцифры. Требуется исследование официального сайта.",
+  evidenceUrl: x.evidence_url || x.website || "",
+  palette: x.palette?.length ? x.palette : [{ name: "серый", hex: "#9AA0AE" }],
+  paletteType: x.palette_type || "Одноцветный",
+  logoDomain: x.domain || "",
+  logoStatus: x.logo_status,
+  classificationStatus: x.classification_status,
+  customLogo: x.logo_url || undefined,
+});
+const toDb = (x: Candidate) => ({
+  brand: x.brand,
+  segment: x.segment,
+  tags: x.tags,
+  palette: x.palette,
+  palette_type: x.paletteType,
+  logo_url: x.customLogo || null,
+  logo_status: x.logoStatus,
+  classification_status: x.classificationStatus,
+  updated_at: new Date().toISOString(),
+});
+const logo = (x: Candidate) => x.customLogo || placeholder;
+const needsLogo = (x: Candidate) => x.logoStatus !== "ready";
+const needsClass = (x: Candidate) => x.classificationStatus !== "ready";
 
 const colorGroups = [
   "чёрный",
@@ -371,60 +140,165 @@ const paletteTypes: Candidate["paletteType"][] = [
   "Двухцветный",
   "Многоцветный",
 ];
-const storageKey = "prcindex-candidate-work-v3";
+// Старые правки, сделанные до переезда в базу, хранились только в этом браузере
+const legacyKey = "prcindex-candidate-work-v3";
 type Queue = "main" | "logo" | "classification";
+type Counts = { total: number; site: number; ready: number; logo: number; classification: number };
+const pageSize = 100;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyQueue(query: any, queue: Queue) {
+  if (queue === "logo") return query.neq("logo_status", "ready");
+  if (queue === "classification") return query.eq("classification_status", "needs");
+  return query.eq("logo_status", "ready").eq("classification_status", "ready");
+}
 
 export function RegistryPilot() {
-  const [items, setItems] = useState(candidates);
+  const [items, setItems] = useState<Candidate[]>([]);
+  const [counts, setCounts] = useState<Counts | null>(null);
+  const [shownTotal, setShownTotal] = useState(0);
   const [selectedInn, setSelectedInn] = useState<string | null>(null);
   const [queue, setQueue] = useState<Queue>("main");
-  const [visible, setVisible] = useState(100);
+  const [visible, setVisible] = useState(pageSize);
+  const [search, setSearch] = useState("");
+  const [term, setTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const edits = JSON.parse(saved) as Record<string, Partial<Candidate>>;
-        setItems((current) =>
-          current.map((x) => (edits[x.inn] ? { ...x, ...edits[x.inn] } : x)),
-        );
-      }
-    } catch {}
+    const t = setTimeout(() => setTerm(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => setVisible(pageSize), [queue, term]);
+
+  const loadCounts = useCallback(async () => {
+    if (!supabase) return;
+    const db = supabase;
+    const head = () => db.from("registry_companies").select("inn", { count: "exact", head: true });
+    const [total, site, ready, logoQ, classQ] = await Promise.all([
+      head(),
+      head().not("website", "is", null),
+      applyQueue(head(), "main"),
+      applyQueue(head(), "logo"),
+      applyQueue(head(), "classification"),
+    ]);
+    const failed = [total, site, ready, logoQ, classQ].find((x) => x.error);
+    if (failed) throw failed.error;
+    setCounts({
+      total: total.count ?? 0,
+      site: site.count ?? 0,
+      ready: ready.count ?? 0,
+      logo: logoQ.count ?? 0,
+      classification: classQ.count ?? 0,
+    });
   }, []);
-  useEffect(() => setVisible(100), [queue]);
-  const selected = items.find((x) => x.inn === selectedInn) ?? null;
-  function save(item: Candidate) {
-    setItems((current) => current.map((x) => (x.inn === item.inn ? item : x)));
+
+  const loadPage = useCallback(async () => {
+    if (!supabase) return;
+    setLoading(true);
+    let query = applyQueue(
+      supabase.from("registry_companies").select(columns, { count: "exact" }),
+      queue,
+    );
+    if (term) {
+      const safe = term.replace(/[%,()]/g, " ");
+      query = /^\d{4,}$/.test(term)
+        ? query.like("inn", `${safe}%`)
+        : query.or(`name.ilike.%${safe}%,brand.ilike.%${safe}%,domain.ilike.%${safe}%`);
+    }
+    const { data, count, error: e } = await query
+      .order("headcount", { ascending: false, nullsFirst: false })
+      .order("inn")
+      .range(0, visible - 1);
+    setLoading(false);
+    if (e) throw e;
+    setItems(((data ?? []) as DbRow[]).map(toCandidate));
+    setShownTotal(count ?? 0);
+  }, [queue, term, visible]);
+
+  useEffect(() => {
+    loadCounts().catch((e) => setError(String(e.message || e)));
+  }, [loadCounts]);
+  useEffect(() => {
+    loadPage().catch((e) => {
+      setLoading(false);
+      setError(String(e.message || e));
+    });
+  }, [loadPage]);
+
+  // Однократный перенос старых правок из браузера в базу
+  useEffect(() => {
+    if (!supabase) return;
+    const db = supabase;
+    type LegacyEdit = {
+      brand?: string;
+      segment?: string;
+      tags?: string[];
+      palette?: PaletteColor[];
+      paletteType?: string;
+      customLogo?: string;
+      logoStatus?: string;
+      classificationStatus?: string;
+    };
+    let saved: Record<string, LegacyEdit> = {};
     try {
-      const edits = JSON.parse(
-        localStorage.getItem(storageKey) || "{}",
-      ) as Record<string, Partial<Candidate>>;
-      edits[item.inn] = item;
-      localStorage.setItem(storageKey, JSON.stringify(edits));
-    } catch {}
+      saved = JSON.parse(localStorage.getItem(legacyKey) || "{}");
+    } catch {
+      return;
+    }
+    const inns = Object.keys(saved);
+    if (!inns.length) return;
+    void (async () => {
+      let moved = 0;
+      for (const inn of inns) {
+        const e = saved[inn];
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (e.brand) patch.brand = e.brand;
+        if (e.segment) patch.segment = e.segment;
+        if (e.tags) patch.tags = e.tags;
+        if (e.palette) patch.palette = e.palette;
+        if (e.paletteType) patch.palette_type = e.paletteType;
+        if (e.customLogo) patch.logo_url = e.customLogo;
+        if (e.logoStatus) patch.logo_status = e.logoStatus === "Готово" || e.logoStatus === "ready" ? "ready" : e.customLogo ? "needs_check" : "needs_search";
+        if (e.classificationStatus) patch.classification_status = e.classificationStatus === "Готово" || e.classificationStatus === "ready" ? "ready" : "needs";
+        const { error: err } = await db.from("registry_companies").update(patch).eq("inn", inn);
+        if (err) return;
+        moved++;
+      }
+      localStorage.setItem(legacyKey + "-moved-to-db", localStorage.getItem(legacyKey) || "{}");
+      localStorage.removeItem(legacyKey);
+      setNotice(`Перенесено в базу правок из этого браузера: ${moved}`);
+      await Promise.all([loadCounts(), loadPage()]);
+    })();
+  }, [loadCounts, loadPage]);
+
+  const selected = items.find((x) => x.inn === selectedInn) ?? null;
+  async function save(item: Candidate) {
+    if (!supabase) throw new Error("Облачное сохранение недоступно");
+    const { error: e } = await supabase.from("registry_companies").update(toDb(item)).eq("inn", item.inn);
+    if (e) throw e;
+    setItems((current) => current.map((x) => (x.inn === item.inn ? item : x)));
+    void loadCounts();
   }
-  const logoQueue = items.filter((x) => x.logoStatus === "Требуется поиск"),
-    classQueue = items.filter(
-      (x) => x.classificationStatus === "Требуется классификация",
-    ),
-    ready = items.filter(
-      (x) =>
-        x.logoStatus !== "Требуется поиск" &&
-        x.classificationStatus !== "Требуется классификация",
-    ),
-    shown =
-      queue === "logo"
-        ? logoQueue
-        : queue === "classification"
-          ? classQueue
-          : ready;
+
+  if (!supabase)
+    return (
+      <div className="queue-empty">
+        <b>Кандидаты доступны только после входа</b>
+        <span>Данные реестра хранятся в закрытой базе Supabase.</span>
+      </div>
+    );
+
+  const fmt = (n?: number) => (n ?? 0).toLocaleString("ru-RU");
   const titles = {
     main: [
       "Готовые карточки",
-      "После исправления карточка автоматически возвращается сюда",
+      "Логотип подтверждён и сегмент определён",
     ],
     logo: [
-      "Требуется поиск логотипа",
-      "Загрузите или укажите официальный логотип и подтвердите его",
+      "Требуется поиск или проверка логотипа",
+      "Найдите официальный логотип или подтвердите найденный автоматически",
     ],
     classification: [
       "Требуется классификация",
@@ -435,16 +309,17 @@ export function RegistryPilot() {
     <div className="registry-pilot">
       <section className="registry-summary">
         <div>
-          <span>Реестр загружен полностью</span>
+          <span>Срез реестра от 03.11.2026</span>
           <h2>Компании из реестра Минцифры</h2>
           <p>
-            Карточка считается готовой только после проверки логотипа и
+            Все действующие аккредитованные ИТ-компании. С сайтом —{" "}
+            {fmt(counts?.site)}. Карточка готова после проверки логотипа и
             классификации.
           </p>
         </div>
         <div className="registry-count">
-          <b>{items.length.toLocaleString("ru-RU")}</b>
-          <small>компании с сайтом</small>
+          <b>{counts ? fmt(counts.total) : "…"}</b>
+          <small>действующих компаний</small>
         </div>
       </section>
       <div className="registry-stats">
@@ -453,7 +328,7 @@ export function RegistryPilot() {
           onClick={() => setQueue("main")}
         >
           <CheckCircle2 />
-          <b>{ready.length.toLocaleString("ru-RU")}</b>
+          <b>{fmt(counts?.ready)}</b>
           <span>готово</span>
         </button>
         <button
@@ -461,7 +336,7 @@ export function RegistryPilot() {
           onClick={() => setQueue("logo")}
         >
           <ImageOff />
-          <b>{logoQueue.length.toLocaleString("ru-RU")}</b>
+          <b>{fmt(counts?.logo)}</b>
           <span>требуется поиск / проверка</span>
         </button>
         <button
@@ -469,37 +344,50 @@ export function RegistryPilot() {
           onClick={() => setQueue("classification")}
         >
           <Tags />
-          <b>{classQueue.length.toLocaleString("ru-RU")}</b>
+          <b>{fmt(counts?.classification)}</b>
           <span>требуется классификация</span>
         </button>
       </div>
+      <label className="registry-search">
+        <Search size={16} />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Название, домен или ИНН"
+        />
+      </label>
+      {error && <p className="save-error">Не удалось загрузить данные: {error}</p>}
+      {notice && <p className="save-ok">{notice}</p>}
       <div className="sectionhead">
         <div>
           <b>{titles[queue][0]}</b>
           <span>
-            {titles[queue][1]} · показано{" "}
-            {Math.min(visible, shown.length).toLocaleString("ru-RU")} из{" "}
-            {shown.length.toLocaleString("ru-RU")}
+            {titles[queue][1]} · показано {fmt(Math.min(visible, shownTotal))}{" "}
+            из {fmt(shownTotal)}
           </span>
         </div>
       </div>
-      {shown.length ? (
+      {loading && !items.length ? (
+        <div className="queue-empty">
+          <span>Загружаем карточки…</span>
+        </div>
+      ) : items.length ? (
         <>
           <section className="candidate-grid">
-            {shown.slice(0, visible).map((x) => (
+            {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
                 <div className="candidate-pic">
-                  <img src={logo(x)} alt={x.brand} />
-                  {x.logoStatus === "Требуется поиск" && (
+                  <img src={logo(x)} alt={x.brand} loading="lazy" />
+                  {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
                   )}
-                  {x.classificationStatus === "Требуется классификация" && (
-                    <span>классифицировать</span>
-                  )}
+                  {!needsLogo(x) && needsClass(x) && <span>классифицировать</span>}
                 </div>
                 <div className="candidate-meta">
                   <b>{x.brand}</b>
-                  <small>{x.website.replace(/^https?:\/\//, "")}</small>
+                  <small>
+                    {x.website ? x.website.replace(/^https?:\/\//, "") : "сайт не указан"}
+                  </small>
                   <div>
                     <span className="candidate-palette-dots">
                       {x.palette.map((c, i) => (
@@ -513,20 +401,25 @@ export function RegistryPilot() {
               </article>
             ))}
           </section>
-          {visible < shown.length && (
+          {visible < shownTotal && (
             <button
               className="load-more"
-              onClick={() => setVisible((x) => x + 100)}
+              disabled={loading}
+              onClick={() => setVisible((x) => x + pageSize)}
             >
-              Показать ещё 100
+              {loading ? "Загружаем…" : "Показать ещё 100"}
             </button>
           )}
         </>
       ) : (
         <div className="queue-empty">
           <CheckCircle2 />
-          <b>Очередь разобрана</b>
-          <span>Все карточки из этого блока перенесены в готовые.</span>
+          <b>{term ? "Ничего не найдено" : "Очередь разобрана"}</b>
+          <span>
+            {term
+              ? "Попробуйте другое название, домен или ИНН."
+              : "Все карточки из этого блока перенесены в готовые."}
+          </span>
         </div>
       )}
       {selected && (
@@ -547,7 +440,7 @@ function CandidateDrawer({
 }: {
   item: Candidate;
   close: () => void;
-  save: (item: Candidate) => void;
+  save: (item: Candidate) => Promise<void>;
 }) {
   const [palette, setPalette] = useState(item.palette),
     [paletteType, setPaletteType] = useState(item.paletteType),
@@ -555,8 +448,9 @@ function CandidateDrawer({
     [tags, setTags] = useState(item.tags.join(", ")),
     [customLogo, setCustomLogo] = useState(item.customLogo || ""),
     [logoConfirmed, setLogoConfirmed] = useState(
-      item.logoStatus !== "Требуется поиск",
+      item.logoStatus === "ready",
     ),
+    [saving, setSaving] = useState(false),
     [message, setMessage] = useState("");
   useEffect(() => {
     setPalette(item.palette);
@@ -564,7 +458,7 @@ function CandidateDrawer({
     setSegment(item.segment);
     setTags(item.tags.join(", "));
     setCustomLogo(item.customLogo || "");
-    setLogoConfirmed(item.logoStatus !== "Требуется поиск");
+    setLogoConfirmed(item.logoStatus === "ready");
     setMessage("");
   }, [item]);
   function readLogo(file?: File) {
@@ -582,7 +476,7 @@ function CandidateDrawer({
     };
     reader.readAsDataURL(file);
   }
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!palette.length) {
       setMessage("Добавьте хотя бы один цвет");
@@ -602,21 +496,28 @@ function CandidateDrawer({
         .map((x) => x.trim())
         .filter(Boolean),
       customLogo: customLogo || undefined,
-      logoStatus: logoConfirmed
-        ? ("Готово" as const)
-        : ("Требуется поиск" as const),
-      classificationStatus:
-        segment && segment !== "Не определено"
-          ? ("Готово" as const)
-          : ("Требуется классификация" as const),
-      status: "Классифицировано" as const,
+      logoStatus: (logoConfirmed && customLogo
+        ? "ready"
+        : customLogo
+          ? "needs_check"
+          : "needs_search") as LogoStatus,
+      classificationStatus: (segment && segment !== "Не определено"
+        ? "ready"
+        : "needs") as Candidate["classificationStatus"],
     };
-    save(next);
-    setMessage(
-      next.logoStatus === "Готово" && next.classificationStatus === "Готово"
-        ? "Сохранено — карточка перенесена в готовые"
-        : "Сохранено — карточка остаётся в очереди",
-    );
+    setSaving(true);
+    try {
+      await save(next);
+      setMessage(
+        next.logoStatus === "ready" && next.classificationStatus === "ready"
+          ? "Сохранено — карточка перенесена в готовые"
+          : "Сохранено — карточка остаётся в очереди",
+      );
+    } catch (err) {
+      setMessage("Не удалось сохранить: " + String((err as Error).message || err));
+    } finally {
+      setSaving(false);
+    }
   }
   const segments = [
     "Заказная веб-разработка",
@@ -650,22 +551,25 @@ function CandidateDrawer({
         </div>
         <span
           className={
-            item.logoStatus === "Требуется поиск" ||
-            item.classificationStatus === "Требуется классификация"
+            needsLogo(item) || needsClass(item)
               ? "candidate-warn"
               : "candidate-ok"
           }
         >
-          {item.logoStatus === "Требуется поиск"
+          {needsLogo(item)
             ? item.customLogo ? "Требуется проверка логотипа" : "Требуется логотип"
-            : item.classificationStatus === "Требуется классификация"
+            : needsClass(item)
               ? "Требуется классификация"
               : "Готово"}
         </span>
         <h2>{item.brand}</h2>
-        <a href={item.website} target="_blank" rel="noreferrer">
-          {item.website}
-        </a>
+        {item.website ? (
+          <a href={item.website} target="_blank" rel="noreferrer">
+            {item.website}
+          </a>
+        ) : (
+          <a>Сайт в реестре не указан</a>
+        )}
         <form className="candidate-palette-editor" onSubmit={submit}>
           <div className="work-section">
             <b>Официальный логотип</b>
@@ -803,8 +707,8 @@ function CandidateDrawer({
               {message}
             </p>
           )}
-          <button className="primary" type="submit">
-            Сохранить карточку
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Сохраняем…" : "Сохранить карточку"}
           </button>
         </form>
         <dl>
@@ -815,8 +719,8 @@ function CandidateDrawer({
             ["Запись в реестре", "№ " + item.registry],
             ["Решение", item.decisionNumber],
             ["Дата аккредитации", item.decision],
-            ["Добавлено в PRC Index", added],
-            ["Сотрудников", item.headcount.toLocaleString("ru-RU")],
+            ["Источник", "Реестр Минцифры, срез 03.11.2026"],
+            ["Сотрудников", item.headcount === null ? "нет данных" : item.headcount.toLocaleString("ru-RU")],
             ["Уверенность", item.confidence],
           ].map(([a, b]) => (
             <div key={a}>
@@ -828,9 +732,11 @@ function CandidateDrawer({
         <div className="candidate-evidence">
           <small>Основание классификации</small>
           <p>{item.evidence}</p>
-          <a href={item.evidenceUrl} target="_blank" rel="noreferrer">
-            Открыть источник <ExternalLink size={13} />
-          </a>
+          {item.evidenceUrl && (
+            <a href={item.evidenceUrl} target="_blank" rel="noreferrer">
+              Открыть источник <ExternalLink size={13} />
+            </a>
+          )}
         </div>
       </aside>
     </div>
