@@ -17,10 +17,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const url = Deno.env.get("SUPABASE_URL")!;
-    const auth = req.headers.get("Authorization") ?? "";
-    const asUser = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
-    const { data: owner, error: ownerErr } = await asUser.rpc("is_owner");
-    if (ownerErr || owner !== true) return json({ error: "Только для владельца исследования" }, 403);
+    let secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    try {
+      const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}") as Record<string, string>;
+      secret = keys.default ?? Object.values(keys)[0] ?? secret;
+    } catch { /* старый формат ключей */ }
+    const admin = createClient(url, secret, { auth: { persistSession: false } });
+    // только владелец исследования: проверяем токен пользователя и его роль
+    const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const { data: u } = await admin.auth.getUser(jwt);
+    if (!u?.user) return json({ error: "Нужно войти в приложение" }, 401);
+    const { data: prof } = await admin.from("profiles").select("role,revoked_at,access_expires_at").eq("user_id", u.user.id).maybeSingle();
+    const active = prof && !prof.revoked_at && (!prof.access_expires_at || new Date(prof.access_expires_at) > new Date());
+    if (!active || prof.role !== "owner") return json({ error: "Только для владельца исследования" }, 403);
 
     const { inn, source } = await req.json() as { inn: string; source: string };
     if (!/^\d{10,12}$/.test(inn ?? "")) return json({ error: "Неверный ИНН" }, 400);
@@ -49,7 +58,6 @@ Deno.serve(async (req) => {
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
     const path = `${inn}/${hash.slice(0, 16)}.${EXT[type]}`;
-    const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const up = await admin.storage.from("candidate-logos").upload(path, bytes, { contentType: type, upsert: true });
     if (up.error) return json({ error: up.error.message }, 500);
     const upd = await admin.from("registry_companies")

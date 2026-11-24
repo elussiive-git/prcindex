@@ -11,12 +11,13 @@ import {
 } from "lucide-react";
 import { supabase } from "./auth";
 import { IT_CODES, SEGMENTS, codeInfo, primarySegment } from "./it-codes";
+import { scanUrl, SCANNER_VERSION, type ScanResult } from "./color-scan";
 import "./registry-pilot.css";
 
 // Кандидаты нового корпуса: все действующие компании реестра Минцифры (таблица registry_companies).
 // Данные больше не встраиваются в сборку — грузятся из Supabase постранично и только после входа.
 
-type PaletteColor = { name: string; hex: string };
+type PaletteColor = { name: string; hex: string; share?: number };
 type LogoStatus = "needs_search" | "needs_check" | "ready";
 type Candidate = {
   name: string;
@@ -47,6 +48,9 @@ type Candidate = {
   logoFlags: string[];
   siteStatus: string;
   siteNote: string;
+  storagePath: string;
+  colorScanned: boolean;
+  displayLogo?: string;
 };
 type DbRow = {
   inn: string;
@@ -77,10 +81,12 @@ type DbRow = {
   logo_flags: string[] | null;
   site_status: string | null;
   site_note: string | null;
+  logo_storage_path: string | null;
+  color_scanned_at: string | null;
   created_at: string;
 };
 const columns =
-  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,primary_code,logo_flags,site_status,site_note,created_at";
+  "inn,ogrn,registry_number,name,decision_date,decision_number,headcount,website,domain,brand,segment,tags,confidence,evidence,evidence_url,palette,palette_type,logo_url,logo_status,classification_status,it_codes,segment_source,codes_found_url,segment_legacy,primary_code,logo_flags,site_status,site_note,logo_storage_path,color_scanned_at,created_at";
 
 const tidyName = (name: string) =>
   name
@@ -125,6 +131,8 @@ const toCandidate = (x: DbRow): Candidate => ({
   logoFlags: x.logo_flags || [],
   siteStatus: x.site_status || "",
   siteNote: x.site_note || "",
+  storagePath: x.logo_storage_path || "",
+  colorScanned: Boolean(x.color_scanned_at),
 });
 const toDb = (x: Candidate) => ({
   brand: x.brand,
@@ -142,7 +150,33 @@ const toDb = (x: Candidate) => ({
   logo_flags: x.logoFlags,
   updated_at: new Date().toISOString(),
 });
-const logo = (x: Candidate) => x.customLogo || placeholder;
+const logo = (x: Candidate) => x.displayLogo || x.customLogo || placeholder;
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Копирует логотип в хранилище (функция fetch-logo), прогоняет сканер цвета v2.1 и сохраняет результат. */
+async function storeAndScan(item: Candidate): Promise<{ palette: PaletteColor[]; paletteType: Candidate["paletteType"]; storagePath: string; scan: ScanResult }> {
+  if (!supabase) throw new Error("Облачное сохранение недоступно");
+  if (!item.customLogo) throw new Error("У карточки нет логотипа");
+  let path = item.storagePath;
+  if (!path) {
+    const { data, error } = await supabase.functions.invoke("fetch-logo", { body: { inn: item.inn, source: item.customLogo } });
+    if (error) throw new Error((data as { error?: string })?.error || error.message);
+    if ((data as { error?: string }).error) throw new Error((data as { error: string }).error);
+    path = (data as { path: string }).path;
+  }
+  const { data: signed, error: se } = await supabase.storage.from("candidate-logos").createSignedUrl(path, 600);
+  if (se) throw se;
+  const scan = await scanUrl(signed.signedUrl);
+  if (scan.error) throw new Error("Сканер: " + scan.error);
+  const palette = (scan.colors ?? []).map((c) => ({ name: c.family, hex: c.hex.toUpperCase(), share: c.share }));
+  const paletteType = capitalize(scan.palette_type ?? "одноцветный") as Candidate["paletteType"];
+  const { error } = await supabase
+    .from("registry_companies")
+    .update({ palette, palette_type: paletteType, color_scan: scan, color_scanned_at: new Date().toISOString(), color_scanner: SCANNER_VERSION, updated_at: new Date().toISOString() })
+    .eq("inn", item.inn);
+  if (error) throw error;
+  return { palette, paletteType, storagePath: path, scan };
+}
+
 const siteStatusLabel: Record<string, string> = {
   ok: "открылся, ИНН совпадает",
   other_inn: "на сайте другой ИНН",
@@ -252,7 +286,14 @@ export function RegistryPilot() {
       .range(0, visible - 1);
     setLoading(false);
     if (e) throw e;
-    setItems(((data ?? []) as DbRow[]).map(toCandidate));
+    const rows = ((data ?? []) as DbRow[]).map(toCandidate);
+    const stored = rows.filter((x) => x.storagePath);
+    if (stored.length) {
+      const { data: signed } = await supabase.storage.from("candidate-logos").createSignedUrls(stored.map((x) => x.storagePath), 3600);
+      const byPath = new Map<string, string>((signed ?? []).map((s: { path: string | null; signedUrl: string }) => [s.path ?? "", s.signedUrl] as [string, string]));
+      for (const x of stored) { const u = byPath.get(x.storagePath); if (u) x.displayLogo = u; }
+    }
+    setItems(rows);
     setShownTotal(count ?? 0);
   }, [queue, term, visible]);
 
@@ -312,6 +353,28 @@ export function RegistryPilot() {
     })();
   }, [loadCounts, loadPage]);
 
+  const [batch, setBatch] = useState("");
+  async function scanBatch() {
+    if (!supabase) return;
+    setBatch("Ищем карточки…");
+    const { data, error: e } = await supabase
+      .from("registry_companies")
+      .select(columns)
+      .not("logo_url", "is", null)
+      .is("color_scanned_at", null)
+      .order("headcount", { ascending: false, nullsFirst: false })
+      .limit(50);
+    if (e) { setBatch("Ошибка: " + e.message); return; }
+    const list = ((data ?? []) as DbRow[]).map(toCandidate);
+    let ok = 0;
+    const failed: string[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setBatch(`Определяем цвет: ${i + 1} из ${list.length}`);
+      try { await storeAndScan(list[i]); ok++; } catch (err) { failed.push(`${list[i].brand}: ${(err as Error).message}`); }
+    }
+    setBatch(`Готово: цвет определён у ${ok} из ${list.length}.` + (failed.length ? ` Не получилось: ${failed.join("; ")}` : ""));
+    await Promise.all([loadCounts(), loadPage()]);
+  }
   const selected = items.find((x) => x.inn === selectedInn) ?? null;
   async function save(item: Candidate) {
     if (!supabase) throw new Error("Облачное сохранение недоступно");
@@ -395,6 +458,12 @@ export function RegistryPilot() {
           placeholder="Название, домен или ИНН"
         />
       </label>
+      <div className="registry-tools">
+        <button className="load-more" disabled={batch.startsWith("Определяем") || batch.startsWith("Ищем")} onClick={scanBatch}>
+          Определить цвет у карточек с логотипом (до 50 за раз)
+        </button>
+        {batch && <span>{batch}</span>}
+      </div>
       {error && <p className="save-error">Не удалось загрузить данные: {error}</p>}
       {notice && <p className="save-ok">{notice}</p>}
       <div className="sectionhead">
@@ -478,6 +547,12 @@ export function RegistryPilot() {
           item={selected}
           close={() => setSelectedInn(null)}
           save={save}
+          rescan={async (it) => {
+            const r = await storeAndScan(it);
+            const next = { ...it, palette: r.palette, paletteType: r.paletteType, storagePath: r.storagePath, colorScanned: true };
+            setItems((cur) => cur.map((x) => (x.inn === it.inn ? { ...x, ...next } : x)));
+            return next;
+          }}
         />
       )}
     </div>
@@ -488,10 +563,12 @@ function CandidateDrawer({
   item,
   close,
   save,
+  rescan,
 }: {
   item: Candidate;
   close: () => void;
   save: (item: Candidate) => Promise<void>;
+  rescan: (item: Candidate) => Promise<Candidate>;
 }) {
   const [palette, setPalette] = useState(item.palette),
     [paletteType, setPaletteType] = useState(item.paletteType),
@@ -506,6 +583,7 @@ function CandidateDrawer({
       item.logoStatus === "ready",
     ),
     [saving, setSaving] = useState(false),
+    [scanning, setScanning] = useState(false),
     [message, setMessage] = useState("");
   useEffect(() => {
     setPalette(item.palette);
@@ -770,9 +848,34 @@ function CandidateDrawer({
             </span>
             <div>
               <b>Цветовая разметка</b>
-              <small>Основные цвета без расчёта процентов</small>
+              <small>
+                {item.colorScanned
+                  ? "Определена сканером цвета v2.1 (доли — в процентах площади знака)"
+                  : "Сканер ещё не запускался"}
+              </small>
             </div>
           </div>
+          <button
+            type="button"
+            className="add-color"
+            disabled={scanning || !(customLogo && !customLogo.startsWith("data:") ? true : Boolean(item.customLogo))}
+            onClick={async () => {
+              setScanning(true);
+              setMessage("");
+              try {
+                const next = await rescan({ ...item, customLogo: customLogo || item.customLogo });
+                setPalette(next.palette);
+                setPaletteType(next.paletteType);
+                setMessage("Сохранено — цвет определён сканером");
+              } catch (err) {
+                setMessage("Не удалось определить цвет: " + String((err as Error).message || err));
+              } finally {
+                setScanning(false);
+              }
+            }}
+          >
+            {scanning ? "Определяем…" : item.colorScanned ? "Определить цвет заново" : "Определить цвет сканером"}
+          </button>
           <label>
             Тип палитры
             <select
