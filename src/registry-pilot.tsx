@@ -110,7 +110,8 @@ const toCandidate = (x: DbRow): Candidate => ({
     x.evidence ||
     "Карточка добавлена из реестра Минцифры. Требуется исследование официального сайта.",
   evidenceUrl: x.evidence_url || x.website || "",
-  palette: x.palette?.length ? x.palette : [{ name: "серый", hex: "#9AA0AE" }],
+  // Цвет определяет только сканер (или ручная правка). Без данных — пусто, без заглушки.
+  palette: x.palette?.length ? x.palette : [],
   paletteType: x.palette_type || "Одноцветный",
   logoDomain: x.domain || "",
   logoStatus: x.logo_status,
@@ -129,8 +130,8 @@ const toDb = (x: Candidate) => ({
   brand: x.brand,
   segment: x.segment,
   tags: x.tags,
-  palette: x.palette,
-  palette_type: x.paletteType,
+  palette: x.palette.length ? x.palette : null,
+  palette_type: x.palette.length ? x.paletteType : null,
   logo_url: x.customLogo || null,
   logo_status: x.logoStatus,
   classification_status: x.classificationStatus,
@@ -433,13 +434,19 @@ export function RegistryPilot() {
                     </small>
                   )}
                   <div>
-                    <span className="candidate-palette-dots">
-                      {x.palette.map((c, i) => (
-                        <i key={i} style={{ background: c.hex }} />
-                      ))}
-                    </span>
-                    {x.palette.map((c) => c.name).join(" + ")}
-                    <em>{x.paletteType}</em>
+                    {x.palette.length ? (
+                      <>
+                        <span className="candidate-palette-dots">
+                          {x.palette.map((c, i) => (
+                            <i key={i} style={{ background: c.hex }} />
+                          ))}
+                        </span>
+                        {x.palette.map((c) => c.name).join(" + ")}
+                        <em>{x.paletteType}</em>
+                      </>
+                    ) : (
+                      <span className="color-pending">цвет не определён</span>
+                    )}
                   </div>
                 </div>
               </article>
@@ -544,10 +551,6 @@ function CandidateDrawer({
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!palette.length) {
-      setMessage("Добавьте хотя бы один цвет");
-      return;
-    }
     if (palette.some((x) => !/^#[0-9a-f]{6}$/i.test(x.hex))) {
       setMessage("Проверьте HEX: нужен формат #RRGGBB");
       return;
@@ -555,6 +558,7 @@ function CandidateDrawer({
     const next = {
       ...item,
       palette: palette.map((x) => ({ ...x, hex: x.hex.toUpperCase() })),
+      // пустая палитра = цвет ещё не определён сканером
       paletteType,
       segment: codeSegment || segment,
       itCodes: codes,
