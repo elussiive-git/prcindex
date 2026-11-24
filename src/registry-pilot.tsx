@@ -290,7 +290,8 @@ export function RegistryPilot() {
     const stored = rows.filter((x) => x.storagePath);
     if (stored.length) {
       const { data: signed } = await supabase.storage.from("candidate-logos").createSignedUrls(stored.map((x) => x.storagePath), 3600);
-      const byPath = new Map<string, string>((signed ?? []).map((s: { path: string | null; signedUrl: string }) => [s.path ?? "", s.signedUrl] as [string, string]));
+      const byPath = new Map<string, string>();
+      for (const sg of signed ?? []) if (sg.path && sg.signedUrl) byPath.set(sg.path, sg.signedUrl);
       for (const x of stored) { const u = byPath.get(x.storagePath); if (u) x.displayLogo = u; }
     }
     setItems(rows);
