@@ -158,7 +158,9 @@ async function storeAndScan(item: Candidate): Promise<{ palette: PaletteColor[];
   if (!item.customLogo) throw new Error("У карточки нет логотипа");
   let path = item.storagePath;
   if (!path) {
-    const { data, error } = await supabase.functions.invoke("fetch-logo", { body: { inn: item.inn, source: item.customLogo } });
+    // логотипы из прежнего поиска лежат в public/ этого сайта — даём функции полный адрес
+    const source = item.customLogo.startsWith("/") ? window.location.origin + item.customLogo : item.customLogo;
+    const { data, error } = await supabase.functions.invoke("fetch-logo", { body: { inn: item.inn, source } });
     if (error) throw new Error((data as { error?: string })?.error || error.message);
     if ((data as { error?: string }).error) throw new Error((data as { error: string }).error);
     path = (data as { path: string }).path;
