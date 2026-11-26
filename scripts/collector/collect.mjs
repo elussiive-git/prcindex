@@ -25,7 +25,19 @@ const PICK = readFileSync(new URL("./pick-logo.js", import.meta.url), "utf8");
 const SCANNER = readFileSync(new URL("./color-scan.browser.js", import.meta.url), "utf8");
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 const RECHECK = ["no_inn", "needs_browser", "unreachable", "cert_error", "other_inn", "domain_lost"];
-const COLS = "inn,name,website,logo_status,logo_flags";
+const COLS = "inn,name,website,logo_status,logo_flags,site_status,site_note,it_codes,collect_log";
+// Насколько хорошо разобран сайт: новый прогон не должен ухудшать уже найденное (серверы за границей часть сайтов не открывают)
+const RANK = { ok: 5, other_inn: 4, domain_lost: 4, no_inn: 2, needs_browser: 1, cert_error: 1, unreachable: 0 };
+const SITE_FIELDS = ["site_status", "site_final_url", "site_description", "it_codes", "codes_found_url", "primary_code", "primary_code_auto",
+  "segment", "segment_source", "classification_status", "evidence", "evidence_url"];
+function keepBetter(row, patch) {
+  const was = RANK[row.site_status] ?? -1, now = RANK[patch.site_status] ?? -1;
+  if (was <= now) return patch;
+  for (const f of SITE_FIELDS) delete patch[f];
+  patch.site_note = `${row.site_note ?? ""} [Браузерный сборщик: ${patch.site_note ?? "без изменений"}; данные о сайте оставлены от прежнего прогона.]`.trim();
+  if (patch.collect_log) patch.collect_log.kept_previous_site_status = row.site_status;
+  return patch;
+}
 
 async function pageAll(build) {
   const out = [];
@@ -115,7 +127,7 @@ async function collectOne(browser, row) {
       }
       if (!resp) {
         Object.assign(patch, { site_status: "unreachable", site_note: "Сайт не открылся в браузере (" + m.split("\n")[0].slice(0, 120) + ").", collect_log: log });
-        await db.from("registry_companies").update(patch).eq("inn", row.inn);
+        await db.from("registry_companies").update(keepBetter(row, patch)).eq("inn", row.inn);
         return { status: "unreachable" };
       }
     }
@@ -227,7 +239,7 @@ async function collectOne(browser, row) {
     } else if (!logoBuf) notes.push("Логотип в шапке не найден.");
     patch.site_note = notes.join(" ");
     patch.collect_log = log;
-    const { error } = await db.from("registry_companies").update(patch).eq("inn", row.inn);
+    const { error } = await db.from("registry_companies").update(keepBetter(row, patch)).eq("inn", row.inn);
     if (error) throw error;
     return { status: patch.site_status, codes: codes.length, logo: Boolean(logoBuf) };
   } finally {
@@ -252,11 +264,11 @@ await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
     } catch (e) {
       errors++; done++;
       console.log(`${done}/${list.length} ${row.inn} ОШИБКА ${String(e.message).slice(0, 160)}`);
-      await db.from("registry_companies").update({
+      await db.from("registry_companies").update(keepBetter(row, {
         site_status: "needs_browser", site_checked_at: new Date().toISOString(),
         site_note: "Сборщик не справился (" + String(e.message).slice(0, 120) + ") — нужен ручной просмотр.",
         collect_log: { collector: COLLECTOR, error: String(e.message).slice(0, 300) },
-      }).eq("inn", row.inn);
+      })).eq("inn", row.inn);
     }
   }
 }));
