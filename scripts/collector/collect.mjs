@@ -126,10 +126,13 @@ function brandMatch(tokens, text) {
   return tokens.some((tok) => tok.length >= 3 && (n.includes(tok) || (n.length >= 4 && tok.includes(n))));
 }
 /** Уверены ли мы в логотипе без проверки человеком. Возвращает [уверен, причины сомнения]. */
-function logoConfidence({ siteOk, best, flags, logoFrom, tokens }) {
+function logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens }) {
   const doubts = [];
-  if (!siteOk) doubts.push("ИНН на сайте не совпал или не найден");
-  const named = best && (best.hint || brandMatch(tokens, `${best.desc} ${best.label} ${best.src ?? ""}`));
+  const brand = best && brandMatch(tokens, `${best.desc} ${best.label} ${best.src ?? ""}`);
+  // сайт подтверждён ИНН, либо в самом логотипе есть название бренда/домена компании (и сайт не чужой)
+  if (siteBad) doubts.push("на сайте чужой ИНН или домен занят");
+  else if (!siteOk && !brand) doubts.push("ИНН не найден и в логотипе нет названия бренда");
+  const named = best && (best.hint || brand);
   const corner = best && best.box.x < 450 && best.box.y < 160;
   if (!best?.root && !(named && corner)) doubts.push("не в ссылке на главную и не помечен как логотип в углу шапки");
   if (!named && !(best?.root && corner)) doubts.push("нет признаков логотипа или названия бренда");
@@ -272,7 +275,8 @@ async function collectOne(browser, row) {
       let flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f)), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
       // ИНН засчитывается, если его нашёл этот или прежний прогон на том же сайте
       const siteOk = Boolean(innPage) || row.site_status === "ok";
-      const [sure, doubts] = logoConfidence({ siteOk, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
+      const siteBad = patch.site_status === "other_inn" || patch.site_status === "domain_lost";
+      const [sure, doubts] = logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
       flags = [...flags, sure ? "auto_confirmed" : "low_confidence"];
       log.confidence = sure ? "уверен" : doubts;
       if (!sure) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);
