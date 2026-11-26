@@ -129,9 +129,10 @@ function brandMatch(tokens, text) {
 function logoConfidence({ siteOk, best, flags, logoFrom, tokens }) {
   const doubts = [];
   if (!siteOk) doubts.push("ИНН на сайте не совпал или не найден");
-  if (!best?.root) doubts.push("не в ссылке на главную");
   const named = best && (best.hint || brandMatch(tokens, `${best.desc} ${best.label} ${best.src ?? ""}`));
-  if (!named) doubts.push("нет признаков логотипа или названия бренда");
+  const corner = best && best.box.x < 450 && best.box.y < 160;
+  if (!best?.root && !(named && corner)) doubts.push("не в ссылке на главную и не помечен как логотип в углу шапки");
+  if (!named && !(best?.root && corner)) doubts.push("нет признаков логотипа или названия бренда");
   if (best && (best.box.x > 683 || best.box.y > 200)) doubts.push("не в левой верхней части шапки");
   if (best && (best.box.w / best.box.h > 12 || best.box.w < 40)) doubts.push("необычные размеры");
   if (flags.includes("no_mark")) doubts.push("сканер не нашёл знак");
@@ -269,7 +270,9 @@ async function collectOne(browser, row) {
       let scan = null;
       try { scan = await scanInBrowser(browser, logoBuf, logoType); } catch (e) { log.scan_error = String(e.message).slice(0, 200); }
       let flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f)), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
-      const [sure, doubts] = logoConfidence({ siteOk: Boolean(innPage), best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
+      // ИНН засчитывается, если его нашёл этот или прежний прогон на том же сайте
+      const siteOk = Boolean(innPage) || row.site_status === "ok";
+      const [sure, doubts] = logoConfidence({ siteOk, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
       flags = [...flags, sure ? "auto_confirmed" : "low_confidence"];
       log.confidence = sure ? "уверен" : doubts;
       if (!sure) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);
