@@ -108,6 +108,47 @@ function autoFlags(scan) {
 }
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// ---------- внутренняя проверка уверенности (без внешних сервисов) ----------
+const TR = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"c",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya" };
+const translit = (t) => t.toLowerCase().split("").map((ch) => TR[ch] ?? ch).join("");
+const norm = (t) => translit(t || "").replace(/[^a-z0-9]+/g, "");
+const STOP = new Set(["ooo", "ao", "pao", "zao", "oao", "obschestvo", "ogranichennoy", "otvetstvennostyu", "aktsionernoe", "akcionernoe", "kompaniya", "gruppa", "tehnologii", "tekhnologii", "it", "ru", "www", "com", "org", "net", "rf", "su", "tech", "group", "soft"]);
+function brandTokens(row, host) {
+  const t = new Set();
+  const stem = host.replace(/^www\./, "").split(".").slice(0, -1).join(" ");
+  for (const w of stem.split(/[-.\s]+/)) if (w.length >= 3 && !STOP.has(w)) t.add(norm(w));
+  const name = (row.name || "").replace(/["«»]/g, " ");
+  for (const w of name.split(/[\s\-–—.,()]+/)) { const n = norm(w); if (n.length >= 4 && !STOP.has(n)) t.add(n); }
+  return [...t];
+}
+function brandMatch(tokens, text) {
+  const n = norm(text);
+  return tokens.some((tok) => tok.length >= 3 && (n.includes(tok) || (n.length >= 4 && tok.includes(n))));
+}
+/** Уверены ли мы в логотипе без проверки человеком. Возвращает [уверен, причины сомнения]. */
+function logoConfidence({ siteOk, best, flags, logoFrom, tokens }) {
+  const doubts = [];
+  if (!siteOk) doubts.push("ИНН на сайте не совпал или не найден");
+  if (!best?.root) doubts.push("не в ссылке на главную");
+  const named = best && (best.hint || brandMatch(tokens, `${best.desc} ${best.label} ${best.src ?? ""}`));
+  if (!named) doubts.push("нет признаков логотипа или названия бренда");
+  if (best && (best.box.x > 683 || best.box.y > 200)) doubts.push("не в левой верхней части шапки");
+  if (best && (best.box.w / best.box.h > 12 || best.box.w < 40)) doubts.push("необычные размеры");
+  if (flags.includes("no_mark")) doubts.push("сканер не нашёл знак");
+  if (flags.includes("low_res")) doubts.push("низкое разрешение");
+  if (!logoFrom) doubts.push("файл не получен");
+  return [doubts.length === 0, doubts];
+}
+/** Однозначный сегмент по кодам: все коды, кроме общих 1.01/2.01, из одного сегмента (или единственный код). */
+function unambiguousPrimary(codes) {
+  const specific = codes.filter((c) => c !== "1.01" && c !== "2.01");
+  if (specific.length) {
+    const segs = new Set(specific.map((c) => SEG[c]));
+    return segs.size === 1 ? specific[0] : null;
+  }
+  return codes.length === 1 ? codes[0] : null;
+}
+
 async function collectOne(browser, row) {
   const log = { collector: COLLECTOR, at: new Date().toISOString() };
   const patch = { site_checked_at: new Date().toISOString(), updated_at: new Date().toISOString() };
@@ -208,11 +249,14 @@ async function collectOne(browser, row) {
     if (otherInn) notes.push(`На сайте ИНН ${otherInn}.`);
     if (lost) notes.push("Домен занят посторонним сайтом.");
     if (innPage && codes.length) {
-      const primary = suggestPrimary(codes);
+      const sure = unambiguousPrimary(codes);
+      const primary = sure ?? suggestPrimary(codes);
       Object.assign(patch, {
-        it_codes: codes, codes_found_url: codesUrl, primary_code: primary, primary_code_auto: true,
-        segment: primary ? SEG[primary] : "Не определено", segment_source: "codes", classification_status: "needs",
-        evidence: "Коды видов ИТ-деятельности по приказу Минцифры № 449 указаны на сайте компании. Основной код предложен автоматически — подтвердить.",
+        it_codes: codes, codes_found_url: codesUrl, primary_code: primary, primary_code_auto: !sure,
+        segment: primary ? SEG[primary] : "Не определено", segment_source: "codes", classification_status: sure ? "ready" : "needs",
+        evidence: sure
+          ? "Коды видов ИТ-деятельности по приказу Минцифры № 449 указаны на сайте компании; сегмент однозначен (подтверждено автоматически)."
+          : "Коды видов ИТ-деятельности по приказу Минцифры № 449 указаны на сайте компании. Основной код предложен автоматически — подтвердить.",
         evidence_url: codesUrl,
       });
       notes.push(`Коды: ${codes.join(", ")}; предложен основной ${primary}.`);
@@ -224,9 +268,13 @@ async function collectOne(browser, row) {
       const path = await upload(`${row.inn}/${hash.slice(0, 16)}.${EXT[logoType]}`, logoBuf, logoType);
       let scan = null;
       try { scan = await scanInBrowser(browser, logoBuf, logoType); } catch (e) { log.scan_error = String(e.message).slice(0, 200); }
-      const flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f)), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
+      let flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f)), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
+      const [sure, doubts] = logoConfidence({ siteOk: Boolean(innPage), best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
+      flags = [...flags, sure ? "auto_confirmed" : "low_confidence"];
+      log.confidence = sure ? "уверен" : doubts;
+      if (!sure) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);
       Object.assign(patch, {
-        logo_storage_path: path, logo_sha256: hash, logo_status: "needs_check", logo_flags: flags,
+        logo_storage_path: path, logo_sha256: hash, logo_status: sure ? "ready" : "needs_check", logo_flags: flags,
         logo_url: best.src && !best.src.startsWith("data:") ? best.src : `${finalUrl.origin}/ (${logoFrom})`,
         logo_source_url: `${finalUrl.href} — ${logoFrom}`,
       });
@@ -241,7 +289,7 @@ async function collectOne(browser, row) {
     patch.collect_log = log;
     const { error } = await db.from("registry_companies").update(keepBetter(row, patch)).eq("inn", row.inn);
     if (error) throw error;
-    return { status: patch.site_status, codes: codes.length, logo: Boolean(logoBuf) };
+    return { status: patch.site_status, codes: codes.length, logo: Boolean(logoBuf), sure: patch.logo_status === "ready", ready: patch.logo_status === "ready" && patch.classification_status === "ready" };
   } finally {
     await ctx.close().catch(() => {});
   }
@@ -250,7 +298,7 @@ async function collectOne(browser, row) {
 const list = await selectCompanies();
 console.log(`Режим ${MODE}, задание ${SHARD + 1}/${SHARDS}: компаний ${list.length}`);
 const browser = await chromium.launch({ args: ["--ignore-certificate-errors"] });
-const stat = {}; let codes = 0, logos = 0, errors = 0, done = 0;
+const stat = {}; let codes = 0, logos = 0, errors = 0, done = 0, sureLogos = 0, readyCards = 0;
 const queue = [...list];
 await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
   while (queue.length) {
@@ -260,7 +308,9 @@ await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
       stat[r.status] = (stat[r.status] ?? 0) + 1;
       if (r.codes) codes++;
       if (r.logo) logos++;
-      console.log(`${++done}/${list.length} ${row.inn} ${r.status}${r.logo ? " логотип" : ""}${r.codes ? " коды" : ""}`);
+      if (r.sure) sureLogos++;
+      if (r.ready) readyCards++;
+      console.log(`${++done}/${list.length} ${row.inn} ${r.status}${r.logo ? (r.sure ? " логотип(уверен)" : " логотип(проверить)") : ""}${r.codes ? " коды" : ""}${r.ready ? " ГОТОВО" : ""}`);
     } catch (e) {
       errors++; done++;
       console.log(`${done}/${list.length} ${row.inn} ОШИБКА ${String(e.message).slice(0, 160)}`);
@@ -273,6 +323,6 @@ await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
   }
 }));
 await browser.close();
-const summary = `Готово: ${done} компаний. ${Object.entries(stat).map(([k, v]) => `${k}: ${v}`).join(", ")}. Логотип у ${logos}, коды у ${codes}, ошибок ${errors}.`;
+const summary = `Готово: ${done} компаний. ${Object.entries(stat).map(([k, v]) => `${k}: ${v}`).join(", ")}. Логотип у ${logos} (уверенно — ${sureLogos}), коды у ${codes}, сразу в «Готово» — ${readyCards}, ошибок ${errors}.`;
 console.log(summary);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Задание ${SHARD + 1}/${SHARDS}\n${summary}\n`);

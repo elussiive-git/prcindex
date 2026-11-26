@@ -219,6 +219,7 @@ async function prescan(inn: string): Promise<void> {
 export const FLAG_LABEL: Record<string, string> = {
   inverted: "для тёмного фона", inverted_auto: "белый — показан на тёмном", parent_brand: "с материнским брендом",
   low_res: "низкое разрешение", tie: "ничья долей цветов", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
+  auto_confirmed: "подтверждён автоматически", human_confirmed: "подтверждён вручную", low_confidence: "сборщик не уверен", duplicate_logo: "такой же логотип у другой компании", rendered: "снимок со страницы",
 };
 
 const siteStatusLabel: Record<string, string> = {
@@ -270,7 +271,7 @@ const pageSize = 100;
 function applyQueue(query: any, queue: Queue) {
   if (queue === "logo") return query.neq("logo_status", "ready");
   if (queue === "review") return query.eq("logo_status", "needs_check").not("logo_storage_path", "is", null);
-  if (queue === "recheck") return query.or(`site_status.in.(${RECHECK_SITE.join(",")}),logo_flags.cs.{rejected}`);
+  if (queue === "recheck") return query.or(`site_status.in.(${RECHECK_SITE.join(",")}),logo_flags.cs.{rejected},logo_flags.cs.{low_confidence}`);
   if (queue === "classification") return query.eq("classification_status", "needs");
   return query.eq("logo_status", "ready").eq("classification_status", "ready");
 }
@@ -489,8 +490,8 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
   async function reviewLogo(x: Candidate, ok: boolean) {
     if (!supabase) return;
     const patch = ok
-      ? { logo_status: "ready", logo_flags: x.logoFlags.filter((f) => f !== "rejected"), updated_at: new Date().toISOString() }
-      : { logo_status: "needs_search", logo_flags: [...new Set([...x.logoFlags, "rejected"])], logo_url: null, logo_storage_path: null,
+      ? { logo_status: "ready", logo_flags: [...x.logoFlags.filter((f) => !["rejected", "low_confidence", "duplicate_logo"].includes(f)), "human_confirmed"], updated_at: new Date().toISOString() }
+      : { logo_status: "needs_search", logo_flags: [...new Set([...x.logoFlags.filter((f) => f !== "auto_confirmed"), "rejected"])], logo_url: null, logo_storage_path: null,
           palette: null, palette_type: null, color_scan: null, color_scanned_at: null, updated_at: new Date().toISOString() };
     const { error: e } = await supabase.from("registry_companies").update(patch).eq("inn", x.inn);
     if (e) { setError(e.message); return; }
@@ -660,10 +661,11 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
                 {queue === "recheck" && (
                   <div className="candidate-flags recheck-reason">
                     {x.logoFlags.includes("rejected") && <i>логотип отклонён</i>}
+                    {x.logoFlags.includes("low_confidence") && <i>сборщик не уверен в логотипе</i>}
                     {x.siteStatus && x.siteStatus !== "ok" && <i>{siteStatusLabel[x.siteStatus] ?? x.siteStatus}</i>}
                   </div>
                 )}
-                {queue === "review" && (
+                {(queue === "review" || (queue === "recheck" && x.logoStatus === "needs_check" && x.storagePath)) && (
                   <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
                     <button className="ok" onClick={() => reviewLogo(x, true)}>Верно</button>
                     <button className="bad" onClick={() => reviewLogo(x, false)}>Не тот</button>

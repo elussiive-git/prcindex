@@ -50,3 +50,22 @@ jobs:
           SHARDS: 6
           CONCURRENCY: 3
         run: node collect.mjs
+
+  finalize:
+    needs: collect
+    if: always()
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - name: Повторяющиеся логотипы → на перепроверку
+        env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node finalize.mjs

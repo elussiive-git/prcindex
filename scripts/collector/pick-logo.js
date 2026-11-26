@@ -46,7 +46,9 @@
     if (tag === "img") src = el.currentSrc || el.src || null;
     if (tag === "object") src = el.data || null;
     if (tag === "picture") src = el.querySelector("img")?.currentSrc || null;
-    cands.push({ s, tag, src, box: { x: r.left, y: r.top, w: r.width, h: r.height }, desc: desc.slice(0, 160) });
+    const label = [el.getAttribute("alt"), el.getAttribute("aria-label"), el.getAttribute("title"), a?.getAttribute("aria-label"), a?.getAttribute("title"),
+      el.querySelector?.("title")?.textContent, (textOnly ? el.innerText : "")].filter(Boolean).join(" ").slice(0, 160);
+    cands.push({ s, tag, src, root: rootHref(a), hint: /logo|лого|brand/i.test(desc), box: { x: r.left, y: r.top, w: r.width, h: r.height }, desc: desc.slice(0, 200), label });
   }
   cands.sort((p, q) => q.s - p.s || p.box.y - q.box.y || p.box.x - q.box.x);
   const best = cands[0] && cands[0].s >= 3 ? cands[0] : null;
