@@ -126,7 +126,7 @@ function brandMatch(tokens, text) {
   return tokens.some((tok) => tok.length >= 3 && (n.includes(tok) || (n.length >= 4 && tok.includes(n))));
 }
 /** Уверены ли мы в логотипе без проверки человеком. Возвращает [уверен, причины сомнения]. */
-function logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens }) {
+function logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens, scan }) {
   const doubts = [];
   const brand = best && brandMatch(tokens, `${best.desc} ${best.label} ${best.src ?? ""}`);
   // сайт подтверждён ИНН, либо в самом логотипе есть название бренда/домена компании (и сайт не чужой)
@@ -141,6 +141,7 @@ function logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens }) {
   if (flags.includes("no_mark")) doubts.push("сканер не нашёл знак");
   if (flags.includes("low_res")) doubts.push("низкое разрешение");
   if (!logoFrom) doubts.push("файл не получен");
+  if (logoFrom === "снимок со страницы" && (scan?.colors?.length ?? 0) >= 5) doubts.push("похоже на фото или баннер, а не на логотип");
   return [doubts.length === 0, doubts];
 }
 /** Однозначный сегмент по кодам: все коды, кроме общих 1.01/2.01, из одного сегмента (или единственный код). */
@@ -276,7 +277,7 @@ async function collectOne(browser, row) {
       // ИНН засчитывается, если его нашёл этот или прежний прогон на том же сайте
       const siteOk = Boolean(innPage) || row.site_status === "ok";
       const siteBad = patch.site_status === "other_inn" || patch.site_status === "domain_lost";
-      const [sure, doubts] = logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host) });
+      const [sure, doubts] = logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host), scan });
       flags = [...flags, sure ? "auto_confirmed" : "low_confidence"];
       log.confidence = sure ? "уверен" : doubts;
       if (!sure) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);

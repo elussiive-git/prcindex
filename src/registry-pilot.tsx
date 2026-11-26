@@ -661,7 +661,7 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-pic dark" : "candidate-pic"}>
+                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || x.palette.filter((c) => c.name === "белый").reduce((t, c) => t + (c.share ?? 0), 0) >= 0.25 ? "candidate-pic dark" : "candidate-pic"}>
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
