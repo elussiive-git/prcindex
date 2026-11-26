@@ -9,7 +9,7 @@
 // Переменные окружения: SUPABASE_URL, SUPABASE_SECRET_KEY, LIMIT (0 = все), SHARD, SHARDS, ORDER = inn | headcount
 import { createClient } from "@supabase/supabase-js";
 
-const FINDER = "site-finder-v1";
+const FINDER = "site-finder-v2";
 const env = (k, d) => process.env[k] ?? d;
 const LIMIT = Number(env("LIMIT", "") || "0");
 const SHARD = Number(env("SHARD", "0")), SHARDS = Number(env("SHARDS", "1"));
@@ -115,6 +115,7 @@ async function hhJson(path) {
   return null;
 }
 async function hhSites(brand) {
+  if (hhState.ok === 0 && hhState.fail >= 5) return []; // hh не пускает (403) — не тратим время
   const res = await hhJson(`/employers?text=${encodeURIComponent(brand)}&per_page=20`);
   await sleep(250);
   if (!res?.items?.length) return [];
@@ -132,6 +133,32 @@ async function hhSites(brand) {
     if (d?.site_url) out.push({ url: d.site_url.startsWith("http") ? d.site_url : `http://${d.site_url}`, hh: e.alternate_url, hhName: e.name });
   }
   return out;
+}
+
+// ---------- поиск Bing (с серверов GitHub отвечает; Яндекс и DuckDuckGo — нет) ----------
+const SKIP_HOST = /(rusprofile|list-org|checko|zachestnyibiznes|sbis\.ru|kontur|focus|audit-it|e-ecolog|vbankcenter|spark-interfax|ofdata|egrul|nalog|gosuslugi|tadviser|hh\.ru|superjob|habr|vk\.com|t\.me|youtube|wikipedia|2gis|yandex|google|bing|microsoft|msn|avito|zoon|yell|orgpage|spravker|cataloxy|companies\.rbc|rbc\.ru|github|linkedin|facebook|instagram|ok\.ru|dzen|pikabu|reestr|digital\.gov|torgi|zakupki|b2b-center|tenderguru|rostender|bankrot|fedresurs|kad\.arbitr|sudact|ru\.wiki|wiki)/i;
+let bingState = { ok: 0, fail: 0, blocked: 0 };
+async function bingHosts(q) {
+  const r = await get(`https://www.bing.com/search?q=${encodeURIComponent(q)}&setlang=ru&cc=RU&count=20`, 15000);
+  await sleep(2500 + Math.random() * 2000);
+  if (!r.ok || !r.utf) { bingState.fail++; return []; }
+  if (/captcha|unusual traffic|подозрительн/i.test(r.utf) && !/b_algo/.test(r.utf)) { bingState.blocked++; return []; }
+  bingState.ok++;
+  const hosts = [];
+  for (const m of r.utf.matchAll(/<li class="b_algo"[\s\S]*?<a[^>]+href="(https?:\/\/[^"]+)"/g)) {
+    let u = m[1].replace(/&amp;/g, "&");
+    // ссылки вида bing.com/ck/a?...&u=a1<base64>
+    if (/bing\.com\/ck\//.test(u)) {
+      const enc = new URL(u).searchParams.get("u");
+      if (enc?.startsWith("a1")) { try { u = Buffer.from(enc.slice(2).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"); } catch {} }
+    }
+    try {
+      const h = new URL(u);
+      if (!SKIP_HOST.test(h.host) && !hosts.some((x) => new URL(x).host === h.host)) hosts.push(h.origin);
+    } catch {}
+    if (hosts.length >= 5) break;
+  }
+  return hosts;
 }
 
 // ---------- одна компания ----------
@@ -159,10 +186,21 @@ async function findOne(row) {
       if (found) break;
     }
   }
-  // 2) угадывание адреса
-  if (!found) {
+  // 2) угадывание адреса (если прежняя версия поисковика уже угадывала — не повторяем)
+  const guessedBefore = row.collect_log?.finder === "site-finder-v1";
+  if (!found && !guessedBefore) {
     for (const d of domainGuesses(brand)) {
       found = await tryUrl(`https://${d}`, "guess");
+      if (found) break;
+    }
+  }
+  // 3) Bing: «название + ИНН + официальный сайт», проверяем первые сайты на ИНН
+  if (!found && brand.length >= 2) {
+    for (const q of [`"${brand}" официальный сайт`, `${brand} ИНН ${row.inn}`]) {
+      for (const u of await bingHosts(q)) {
+        found = await tryUrl(u, "bing");
+        if (found) break;
+      }
       if (found) break;
     }
   }
@@ -188,7 +226,7 @@ async function selectCompanies() {
 
 const list = await selectCompanies();
 console.log(`Поиск сайтов, задание ${SHARD + 1}/${SHARDS}: компаний ${list.length}`);
-const stat = { hh: 0, guess: 0, none: 0, candidates: 0, errors: 0 };
+const stat = { hh: 0, guess: 0, bing: 0, none: 0, candidates: 0, errors: 0 };
 let done = 0;
 const queue = [...list];
 async function worker() {
@@ -201,7 +239,7 @@ async function worker() {
         stat[r.found.via]++;
         patch.website = r.found.url;
         patch.domain = r.found.host;
-        patch.site_note = `Сайт найден автоматически (${r.found.via === "hh" ? "через hh.ru" : "по названию"}), ИНН на сайте совпал: ${r.found.page}`;
+        patch.site_note = `Сайт найден автоматически (${{ hh: "через hh.ru", guess: "по названию", bing: "через поиск Bing" }[r.found.via]}), ИНН на сайте совпал: ${r.found.page}`;
         log.found = { via: r.found.via, url: r.found.url, page: r.found.page, hh: r.found.hh ?? null };
       } else {
         stat.none++;
@@ -218,4 +256,5 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: Number(env("CONCURRENCY", "4")) }, worker));
 console.log(`hh.ru: успешных запросов ${hhState.ok}, неудачных ${hhState.fail}${hhState.lastError ? `, последняя ошибка: ${hhState.lastError}` : ""}`);
-console.log(`Итог: ${list.length} компаний. Найдено через hh.ru — ${stat.hh}, по названию — ${stat.guess}, не найдено — ${stat.none} (из них есть кандидат без ИНН — ${stat.candidates}), ошибок ${stat.errors}.`);
+console.log(`Bing: ответов ${bingState.ok}, ошибок ${bingState.fail}, блокировок ${bingState.blocked}`);
+console.log(`Итог: ${list.length} компаний. Найдено через hh.ru — ${stat.hh}, по названию — ${stat.guess}, через Bing — ${stat.bing}, не найдено — ${stat.none} (из них есть кандидат без ИНН — ${stat.candidates}), ошибок ${stat.errors}.`);
