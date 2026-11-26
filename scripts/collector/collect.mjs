@@ -60,7 +60,7 @@ async function selectCompanies() {
   } else if (MODE === "recheck") {
     rows = await pageAll(() => base().or(`site_status.in.(${RECHECK.join(",")}),logo_flags.cs.{rejected}`).order("headcount", { ascending: false, nullsFirst: false }).order("inn"));
   } else {
-    rows = await pageAll(() => base().or(`collect_log.is.null,collect_log->>collector.neq.${COLLECTOR}`).order("headcount", { ascending: false, nullsFirst: false }).order("inn"));
+    rows = await pageAll(() => base().or(`collect_log.is.null,collect_log->>collector.is.null,collect_log->>collector.neq.${COLLECTOR}`).order("headcount", { ascending: false, nullsFirst: false }).order("inn"));
     if (LIMIT > 0) rows = rows.slice(0, LIMIT);
   }
   rows = rows ?? [];
