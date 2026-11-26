@@ -1,0 +1,10 @@
+{
+  "name": "prcindex-collector",
+  "private": true,
+  "type": "module",
+  "description": "Сбор логотипов и кодов Минцифры с сайтов кандидатов настоящим браузером (Playwright). Запускается в GitHub Actions.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.81.0",
+    "playwright": "^1.49.0"
+  }
+}

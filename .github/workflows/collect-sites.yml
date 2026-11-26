@@ -1,0 +1,52 @@
+name: Сбор сайтов кандидатов (браузер)
+
+# Запуск вручную: Actions → «Сбор сайтов кандидатов (браузер)» → Run workflow.
+# Нужен секрет репозитория SUPABASE_SECRET_KEY (секретный ключ Supabase: Project Settings → API Keys).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Что собирать: top — первые LIMIT по численности; remaining — все ещё не пройденные браузером; recheck — очередь «Перепроверка»; inns — список ИНН"
+        type: choice
+        options: [top, remaining, recheck, inns]
+        default: top
+      limit:
+        description: "Сколько компаний (для top / remaining; пусто = все)"
+        default: "50"
+      inns:
+        description: "ИНН через запятую (для inns)"
+        default: ""
+
+concurrency:
+  group: collect-sites
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Сбор
+        env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MODE: ${{ inputs.mode }}
+          LIMIT: ${{ inputs.limit }}
+          INNS: ${{ inputs.inns }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: 6
+          CONCURRENCY: 3
+        run: node collect.mjs

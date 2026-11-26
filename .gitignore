@@ -10,3 +10,4 @@ work/logos-snapshot.tgz
 
 work/repo-snapshot.tgz
 __pycache__/
+scripts/collector/node_modules/
