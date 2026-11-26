@@ -1,0 +1,44 @@
+name: Поиск сайтов (компании без сайта)
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Сколько компаний (0 = все ещё не пройденные)"
+        default: "200"
+      order:
+        description: "Порядок: inn (вперемешку, для пробы) или headcount (сначала крупные)"
+        default: "inn"
+
+concurrency:
+  group: find-sites
+  cancel-in-progress: false
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - name: Поиск
+        env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          LIMIT: ${{ inputs.limit }}
+          ORDER: ${{ inputs.order }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: 3
+          CONCURRENCY: 4
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
+        run: node find-sites.mjs
