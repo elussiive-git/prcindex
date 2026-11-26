@@ -4,7 +4,8 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - shell: bash {0}
+        run: |
           for u in "https://reestr.digital.gov.ru/reestr/" "https://reestr.digital.gov.ru/reestr/?PAGEN_1=2" "https://api.hh.ru/employers?text=test" "https://www.rusprofile.ru/" "https://html.duckduckgo.com/html/?q=%D1%80%D0%B5%D0%B0%D0%BA%D1%82%D0%B8%D0%B2" "https://www.bing.com/search?q=reaktiv+it" "https://yandex.ru/search/?text=reaktiv"; do
             echo "== $u"; curl -s -m 25 -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36" -o /tmp/p.html -w "HTTP %{http_code}, %{size_download} байт\n" "$u"; grep -o 'ИНН[^<]\{0,40\}' /tmp/p.html | head -3; grep -oi 'captcha\|robot' /tmp/p.html | sort | uniq -c | head -3
           done
