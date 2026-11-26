@@ -261,16 +261,17 @@ const paletteTypes: Candidate["paletteType"][] = [
 ];
 // Старые правки, сделанные до переезда в базу, хранились только в этом браузере
 const legacyKey = "prcindex-candidate-work-v3";
-type Queue = "main" | "logo" | "classification" | "review" | "recheck";
+type Queue = "main" | "logo" | "classification" | "review" | "recheck" | "auto";
 // На перепроверку через Chrome: отклонённые логотипы и сайты, которые сервер не смог разобрать
 const RECHECK_SITE = ["no_inn", "needs_browser", "unreachable", "cert_error", "other_inn", "domain_lost"];
-type Counts = { total: number; site: number; ready: number; logo: number; classification: number; review: number };
+type Counts = { total: number; site: number; ready: number; logo: number; classification: number; review: number; auto: number };
 const pageSize = 100;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyQueue(query: any, queue: Queue) {
   if (queue === "logo") return query.neq("logo_status", "ready");
   if (queue === "review") return query.eq("logo_status", "needs_check").not("logo_storage_path", "is", null);
+  if (queue === "auto") return query.contains("logo_flags", ["auto_confirmed"]);
   if (queue === "recheck") return query.or(`site_status.in.(${RECHECK_SITE.join(",")}),logo_flags.cs.{rejected},logo_flags.cs.{low_confidence}`);
   if (queue === "classification") return query.eq("classification_status", "needs");
   return query.eq("logo_status", "ready").eq("classification_status", "ready");
@@ -299,15 +300,16 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
     if (!supabase) return;
     const db = supabase;
     const head = () => db.from("registry_companies").select("inn", { count: "exact", head: true });
-    const [total, site, ready, logoQ, classQ, reviewQ] = await Promise.all([
+    const [total, site, ready, logoQ, classQ, reviewQ, autoQ] = await Promise.all([
       head(),
       head().not("website", "is", null),
       applyQueue(head(), "main"),
       applyQueue(head(), "logo"),
       applyQueue(head(), "classification"),
       applyQueue(head(), "review"),
+      applyQueue(head(), "auto"),
     ]);
-    const failed = [total, site, ready, logoQ, classQ, reviewQ].find((x) => x.error);
+    const failed = [total, site, ready, logoQ, classQ, reviewQ, autoQ].find((x) => x.error);
     if (failed) throw failed.error;
     setCounts({
       total: total.count ?? 0,
@@ -316,6 +318,7 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
       logo: logoQ.count ?? 0,
       classification: classQ.count ?? 0,
       review: reviewQ.count ?? 0,
+      auto: autoQ.count ?? 0,
     });
   }, []);
 
@@ -529,6 +532,10 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
       "Требуется классификация",
       "Уточните сегмент, специализации и цветовую разметку",
     ],
+    auto: [
+      "Логотип подтверждён сборщиком автоматически",
+      "Выборочная проверка: «Не тот» — отправить на повторный поиск",
+    ],
     recheck: [
       "Перепроверка через Chrome",
       "Отклонённые логотипы и сайты, которые сервер не смог разобрать: причина — на карточке",
@@ -601,6 +608,14 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
           <b>{fmt(counts?.review)}</b>
           <span>проверка логотипов</span>
         </button>
+        <button
+          className={queue === "auto" ? "active" : ""}
+          onClick={() => setQueue("auto")}
+        >
+          <CheckCircle2 />
+          <b>{fmt(counts?.auto)}</b>
+          <span>подтверждено автоматически</span>
+        </button>
       </div>
       </>)}
       <label className="registry-search">
@@ -665,7 +680,7 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
                     {x.siteStatus && x.siteStatus !== "ok" && <i>{siteStatusLabel[x.siteStatus] ?? x.siteStatus}</i>}
                   </div>
                 )}
-                {(queue === "review" || (queue === "recheck" && x.logoStatus === "needs_check" && x.storagePath)) && (
+                {(queue === "review" || queue === "auto" || (queue === "recheck" && x.logoStatus === "needs_check" && x.storagePath)) && (
                   <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
                     <button className="ok" onClick={() => reviewLogo(x, true)}>Верно</button>
                     <button className="bad" onClick={() => reviewLogo(x, false)}>Не тот</button>
