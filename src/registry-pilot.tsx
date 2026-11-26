@@ -218,7 +218,7 @@ async function prescan(inn: string): Promise<void> {
 }
 export const FLAG_LABEL: Record<string, string> = {
   inverted: "для тёмного фона", inverted_auto: "белый — показан на тёмном", parent_brand: "с материнским брендом",
-  low_res: "низкое разрешение", tie: "ничья долей цветов", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
+  low_res: "низкое разрешение", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
   auto_confirmed: "подтверждён автоматически", human_confirmed: "подтверждён вручную", low_confidence: "сборщик не уверен", duplicate_logo: "такой же логотип у другой компании", rendered: "снимок со страницы",
 };
 
@@ -661,7 +661,7 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || x.palette.filter((c) => c.name === "белый").reduce((t, c) => t + (c.share ?? 0), 0) >= 0.25 ? "candidate-pic dark" : "candidate-pic"}>
+                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || x.palette.some((c) => c.name === "белый") ? "candidate-pic dark" : "candidate-pic"}>
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
@@ -882,7 +882,7 @@ function CandidateDrawer({
         <button className="close" onClick={close}>
           <X />
         </button>
-        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
+        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || item.palette?.some((c) => c.name === "белый") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
           <img src={customLogo || logo(item)} alt={item.brand} />
         </div>
         <span
