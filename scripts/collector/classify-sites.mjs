@@ -9,6 +9,35 @@ import { SEG } from "./codes.mjs";
 
 const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const DRY = process.env.DRY === "1";
+// DEEP=1: если по заголовку и описанию сегмент не ясен — читаем текст главной страницы и страниц «О компании» / «Услуги»
+const DEEP = process.env.DEEP === "1";
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
+async function fetchText(url, ms = 12000) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "ru" }, redirect: "follow", signal: ctl.signal });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    let html = buf.toString("utf8");
+    if (/charset=["']?windows-1251/i.test(html.slice(0, 3000)) || /windows-1251/i.test(r.headers.get("content-type") ?? "")) html = new TextDecoder("windows-1251").decode(buf);
+    return { url: r.url, html };
+  } catch { return null; } finally { clearTimeout(t); }
+}
+const visible = (html) => html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ");
+async function siteText(website) {
+  const home = await fetchText(website);
+  if (!home) return null;
+  let text = visible(home.html).slice(0, 6000);
+  const links = [];
+  for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["'][^>]*>([^<]{0,60})/gi)) {
+    if (/(о компании|о нас|about|услуги|services|решения|продукт|чем мы|направлени)/i.test(`${m[1]} ${m[2]}`)) {
+      try { const u = new URL(m[1], home.url); if (u.host === new URL(home.url).host) links.push(u.href); } catch {}
+    }
+    if (links.length >= 2) break;
+  }
+  for (const l of [...new Set(links)]) { const p = await fetchText(l, 10000); if (p) text += " " + visible(p.html).slice(0, 5000); }
+  return text;
+}
 
 const S = {
   DEV: "Разработка ПО, информационных систем и сайтов",
@@ -67,8 +96,8 @@ function pick(scores, allowed) {
 const rows = [];
 for (let from = 0; ; from += 1000) {
   const { data, error } = await db.from("registry_companies")
-    .select("inn,brand,name,site_description,it_codes,segment,segment_source,classification_status,evidence")
-    .eq("classification_status", "needs").not("site_description", "is", null).order("inn").range(from, from + 999);
+    .select("inn,brand,name,website,site_description,it_codes,segment,segment_source,classification_status,evidence")
+    .eq("classification_status", "needs").not(DEEP ? "website" : "site_description", "is", null).order("inn").range(from, from + 999);
   if (error) throw error;
   rows.push(...data);
   if (data.length < 1000) break;
@@ -77,27 +106,30 @@ console.log(`Карточек без сегмента с описанием са
 const stat = { byCodes: 0, byText: 0, left: 0, errors: 0 };
 const bySeg = {};
 const samples = [];
-for (const r of rows) {
-  const text = `${r.site_description ?? ""}`;
-  const sc = score(text);
+const queue = [...rows];
+async function one(r) {
+  let text = `${r.site_description ?? ""}`;
+  let sc = score(text);
+  if (DEEP) { const deep = await siteText(r.website); if (!deep) { stat.left++; return; } text = `${text} ${deep}`; sc = score(text); }
   const codeSegs = [...new Set((r.it_codes ?? []).filter((c) => c !== "1.01" && c !== "2.01").map((c) => SEG[c]).filter(Boolean))];
   let res = null, source = null;
   if (codeSegs.length > 1) { res = pick(sc, codeSegs); source = "codes"; }
   else if (!r.it_codes?.length || r.segment_source !== "codes") { res = pick(sc); source = "description"; }
-  if (!res) { stat.left++; continue; }
+  if (!res) { stat.left++; return; }
   stat[source === "codes" ? "byCodes" : "byText"]++;
   bySeg[res.segment] = (bySeg[res.segment] ?? 0) + 1;
   if (samples.length < 40) samples.push(`${r.inn} «${r.brand ?? r.name}» → ${res.segment} [${res.hits.join(", ")}] :: ${text.slice(0, 120)}`);
-  if (DRY) continue;
+  if (DRY) return;
   const note = source === "codes"
     ? `Сегмент выбран среди сегментов кодов с сайта по описанию сайта (признаки: ${res.hits.join(", ")}).`
-    : `Сегмент определён автоматически по описанию сайта (признаки: ${res.hits.join(", ")}). Кодов Минцифры на сайте нет.`;
+    : `Сегмент определён автоматически по ${DEEP ? "тексту сайта" : "описанию сайта"} (признаки: ${res.hits.join(", ")}). Кодов Минцифры на сайте нет.`;
   const { error } = await db.from("registry_companies").update({
     segment: res.segment, segment_source: source, classification_status: "ready",
     evidence: note, updated_at: new Date().toISOString(),
   }).eq("inn", r.inn).eq("classification_status", "needs");
   if (error) { stat.errors++; console.log(r.inn, error.message); }
 }
+await Promise.all(Array.from({ length: DEEP ? 8 : 1 }, async () => { for (let r; (r = queue.shift()); ) await one(r); }));
 console.log(samples.join("\n"));
 console.log("По сегментам:", JSON.stringify(bySeg));
 console.log(`Итог${DRY ? " (пробный, без записи)" : ""}: выбрано среди кодов — ${stat.byCodes}, по описанию — ${stat.byText}, оставлено для ручной классификации — ${stat.left}, ошибок — ${stat.errors}.`);

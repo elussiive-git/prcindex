@@ -5,6 +5,9 @@ on:
       dry:
         description: "1 — пробный прогон без записи в базу"
         default: "1"
+      deep:
+        description: "1 — читать текст сайта (для карточек, где описания мало)"
+        default: "0"
 jobs:
   classify:
     runs-on: ubuntu-latest
@@ -21,4 +24,6 @@ jobs:
           SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DRY: ${{ inputs.dry }}
+          DEEP: ${{ inputs.deep }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
         run: node classify-sites.mjs
