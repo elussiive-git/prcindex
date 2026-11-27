@@ -218,7 +218,7 @@ async function prescan(inn: string): Promise<void> {
 }
 export const FLAG_LABEL: Record<string, string> = {
   inverted: "для тёмного фона", inverted_auto: "белый — показан на тёмном", parent_brand: "с материнским брендом",
-  low_res: "низкое разрешение", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
+  low_res: "низкое разрешение", sent_back: "возвращено на проверку", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
   auto_confirmed: "подтверждён автоматически", human_confirmed: "подтверждён вручную", low_confidence: "сборщик не уверен", duplicate_logo: "такой же логотип у другой компании", rendered: "снимок со страницы",
 };
 
@@ -501,6 +501,17 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
     setItems((cur) => cur.filter((y) => y.inn !== x.inn));
     void loadCounts();
   }
+  /** Вернуть подтверждённую карточку на рассмотрение: логотип → «проверка логотипов», сегмент → «требуется классификация». */
+  async function sendBack(x: Candidate, what: "logo" | "segment") {
+    if (!supabase) return;
+    const patch = what === "logo"
+      ? { logo_status: "needs_check", logo_flags: [...new Set([...x.logoFlags.filter((f) => !["auto_confirmed", "human_confirmed"].includes(f)), "sent_back"])], updated_at: new Date().toISOString() }
+      : { classification_status: "needs", updated_at: new Date().toISOString() };
+    const { error: e } = await supabase.from("registry_companies").update(patch).eq("inn", x.inn);
+    if (e) { setError(e.message); return; }
+    setItems((cur) => cur.filter((y) => y.inn !== x.inn));
+    void loadCounts();
+  }
   const selected = items.find((x) => x.inn === selectedInn) ?? null;
   async function save(item: Candidate) {
     if (!supabase) throw new Error("Облачное сохранение недоступно");
@@ -683,7 +694,14 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
                 {(queue === "review" || queue === "auto" || (queue === "recheck" && x.logoStatus === "needs_check" && x.storagePath)) && (
                   <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
                     <button className="ok" onClick={() => reviewLogo(x, true)}>Верно</button>
+                    {queue === "auto" && <button className="back" title="Логотип под сомнением — в очередь «проверка логотипов»" onClick={() => sendBack(x, "logo")}>Проверить</button>}
                     <button className="bad" onClick={() => reviewLogo(x, false)}>Не тот</button>
+                  </div>
+                )}
+                {queue === "main" && (
+                  <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
+                    <button className="back" title="Вернуть логотип в «проверку логотипов»" onClick={() => sendBack(x, "logo")}>Лого на проверку</button>
+                    <button className="back" title="Вернуть в «требуется классификация»" onClick={() => sendBack(x, "segment")}>Сегмент на проверку</button>
                   </div>
                 )}
                 <div className="candidate-meta">
