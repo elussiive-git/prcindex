@@ -672,7 +672,7 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || x.palette.some((c) => c.name === "белый") ? "candidate-pic dark" : "candidate-pic"}>
+                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-pic dark" : x.palette.some((c) => c.name === "белый") ? "candidate-pic grey" : "candidate-pic"}>
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
@@ -900,7 +900,7 @@ function CandidateDrawer({
         <button className="close" onClick={close}>
           <X />
         </button>
-        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") || item.palette?.some((c) => c.name === "белый") ? "candidate-detail-logo dark" : "candidate-detail-logo"}>
+        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-detail-logo dark" : item.palette?.some((c) => c.name === "белый") ? "candidate-detail-logo grey" : "candidate-detail-logo"}>
           <img src={customLogo || logo(item)} alt={item.brand} />
         </div>
         <span
