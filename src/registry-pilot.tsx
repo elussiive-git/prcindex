@@ -217,7 +217,7 @@ async function prescan(inn: string): Promise<void> {
   }).eq("inn", inn);
 }
 export const FLAG_LABEL: Record<string, string> = {
-  inverted: "для тёмного фона", inverted_auto: "белый — показан на тёмном", parent_brand: "с материнским брендом",
+  parent_brand: "с материнским брендом",
   low_res: "низкое разрешение", sent_back: "возвращено на проверку", no_mark: "знак не найден", site_icon: "иконка сайта", rejected: "отклонён",
   auto_confirmed: "подтверждён автоматически", human_confirmed: "подтверждён вручную", low_confidence: "сборщик не уверен", duplicate_logo: "такой же логотип у другой компании", rendered: "снимок со страницы",
 };
@@ -231,6 +231,28 @@ const siteStatusLabel: Record<string, string> = {
   needs_browser: "сайт собирается в браузере — нужен проход через Chrome",
   domain_lost: "домен занят посторонним сайтом",
 };
+/** Фон плитки логотипа: ручной выбор (bg_white / bg_grey / bg_black) важнее автоматического. */
+type Bg = "white" | "grey" | "black";
+const BG_FLAGS = ["bg_white", "bg_grey", "bg_black"];
+function bgOf(flags: string[], palette: PaletteColor[] | null | undefined): Bg {
+  if (flags.includes("bg_white")) return "white";
+  if (flags.includes("bg_grey")) return "grey";
+  if (flags.includes("bg_black")) return "black";
+  if (flags.some((f) => f === "inverted" || f === "inverted_auto")) return "black";
+  if (palette?.some((c) => c.name === "белый")) return "grey";
+  return "white";
+}
+const bgClass = (bg: Bg) => (bg === "black" ? " dark" : bg === "grey" ? " grey" : "");
+const withBg = (flags: string[], bg: Bg) => [...flags.filter((f) => !BG_FLAGS.includes(f)), `bg_${bg}`];
+function BgPicker({ value, onPick }: { value: Bg; onPick: (bg: Bg) => void }) {
+  return (
+    <div className="bg-picker" onClick={(e) => e.stopPropagation()} title="Фон для логотипа">
+      {(["white", "grey", "black"] as Bg[]).map((bg) => (
+        <button key={bg} className={`bg-${bg}${value === bg ? " on" : ""}`} aria-label={bg === "white" ? "белый фон" : bg === "grey" ? "серый фон" : "чёрный фон"} onClick={() => onPick(bg)} />
+      ))}
+    </div>
+  );
+}
 const needsLogo = (x: Candidate) => x.logoStatus !== "ready";
 const needsClass = (x: Candidate) => x.classificationStatus !== "ready";
 
@@ -512,6 +534,13 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
     setItems((cur) => cur.filter((y) => y.inn !== x.inn));
     void loadCounts();
   }
+  async function setBg(x: Candidate, bg: Bg) {
+    if (!supabase) return;
+    const flags = withBg(x.logoFlags, bg);
+    setItems((cur) => cur.map((y) => (y.inn === x.inn ? { ...y, logoFlags: flags } : y)));
+    const { error: e } = await supabase.from("registry_companies").update({ logo_flags: flags }).eq("inn", x.inn);
+    if (e) setError(e.message);
+  }
   const selected = items.find((x) => x.inn === selectedInn) ?? null;
   async function save(item: Candidate) {
     if (!supabase) throw new Error("Облачное сохранение недоступно");
@@ -672,7 +701,8 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
           <section className="candidate-grid">
             {items.map((x) => (
               <article key={x.inn} onClick={() => setSelectedInn(x.inn)}>
-                <div className={x.logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-pic dark" : x.palette.some((c) => c.name === "белый") ? "candidate-pic grey" : "candidate-pic"}>
+                <div className={"candidate-pic" + bgClass(bgOf(x.logoFlags, x.palette))}>
+                  <BgPicker value={bgOf(x.logoFlags, x.palette)} onPick={(bg) => setBg(x, bg)} />
                   <img src={logo(x)} alt={x.brand} loading="lazy" />
                   {needsLogo(x) && (
                     <span>{x.customLogo ? "проверить логотип" : "нет логотипа"}</span>
@@ -900,7 +930,8 @@ function CandidateDrawer({
         <button className="close" onClick={close}>
           <X />
         </button>
-        <div className={logoFlags.some((f) => f === "inverted" || f === "inverted_auto") ? "candidate-detail-logo dark" : item.palette?.some((c) => c.name === "белый") ? "candidate-detail-logo grey" : "candidate-detail-logo"}>
+        <div className={"candidate-detail-logo" + bgClass(bgOf(logoFlags, item.palette))}>
+          <BgPicker value={bgOf(logoFlags, item.palette)} onPick={(bg) => { const f = withBg(logoFlags, bg); setLogoFlags(f); void save({ ...item, logoFlags: f }); }} />
           <img src={customLogo || logo(item)} alt={item.brand} />
         </div>
         <span
