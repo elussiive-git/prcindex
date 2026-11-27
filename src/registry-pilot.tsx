@@ -700,8 +700,8 @@ export function RegistryPilot({ mode }: { mode?: "recheck" } = {}) {
                 )}
                 {queue === "main" && (
                   <div className="review-buttons" onClick={(e) => e.stopPropagation()}>
-                    <button className="back" title="Вернуть логотип в «проверку логотипов»" onClick={() => sendBack(x, "logo")}>Лого на проверку</button>
-                    <button className="back" title="Вернуть в «требуется классификация»" onClick={() => sendBack(x, "segment")}>Сегмент на проверку</button>
+                    <button className="back" title="Вернуть логотип в «проверку логотипов»" onClick={() => sendBack(x, "logo")}>↩ Логотип</button>
+                    <button className="back" title="Вернуть в «требуется классификация»" onClick={() => sendBack(x, "segment")}>↩ Сегмент</button>
                   </div>
                 )}
                 <div className="candidate-meta">
