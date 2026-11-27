@@ -25,7 +25,7 @@ const PICK = readFileSync(new URL("./pick-logo.js", import.meta.url), "utf8");
 const SCANNER = readFileSync(new URL("./color-scan.browser.js", import.meta.url), "utf8");
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 const RECHECK = ["no_inn", "needs_browser", "unreachable", "cert_error", "other_inn", "domain_lost"];
-const COLS = "inn,name,website,logo_status,logo_flags,site_status,site_note,it_codes,collect_log";
+const COLS = "inn,name,website,logo_status,logo_flags,site_status,site_note,it_codes,collect_log,classification_status";
 // Насколько хорошо разобран сайт: новый прогон не должен ухудшать уже найденное (серверы за границей часть сайтов не открывают)
 const RANK = { ok: 5, other_inn: 4, domain_lost: 4, no_inn: 2, needs_browser: 1, cert_error: 1, unreachable: 0 };
 const SITE_FIELDS = ["site_status", "site_final_url", "site_description", "it_codes", "codes_found_url", "primary_code", "primary_code_auto",
@@ -253,7 +253,7 @@ async function collectOne(browser, row) {
     patch.site_status = innPage ? "ok" : lost ? "domain_lost" : otherInn ? "other_inn" : "no_inn";
     if (otherInn) notes.push(`На сайте ИНН ${otherInn}.`);
     if (lost) notes.push("Домен занят посторонним сайтом.");
-    if (innPage && codes.length) {
+    if (innPage && codes.length && row.classification_status !== "ready") {
       const sure = unambiguousPrimary(codes);
       const primary = sure ?? suggestPrimary(codes);
       Object.assign(patch, {
@@ -268,7 +268,8 @@ async function collectOne(browser, row) {
     } else if (innPage) notes.push("Коды Минцифры на сайте не найдены.");
 
     // логотип → хранилище + предварительный сканер
-    if (logoBuf && patch.site_status !== "domain_lost" && patch.site_status !== "other_inn") {
+    // подтверждённый логотип (вручную или из каталога) не заменяем
+    if (logoBuf && row.logo_status !== "ready" && patch.site_status !== "domain_lost" && patch.site_status !== "other_inn") {
       const hash = sha(logoBuf);
       const path = await upload(`${row.inn}/${hash.slice(0, 16)}.${EXT[logoType]}`, logoBuf, logoType);
       let scan = null;

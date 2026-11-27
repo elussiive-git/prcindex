@@ -1,0 +1,27 @@
+name: Логотипы из каталога → реестр
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "1 — пробный прогон без записи"
+        default: "1"
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - id: t
+        env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DRY: ${{ inputs.dry }}
+        run: node catalog-transfer.mjs
+      - name: Список ИНН для сборщика
+        run: echo "${{ steps.t.outputs.inns }}"
