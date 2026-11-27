@@ -42,7 +42,14 @@ function keepBetter(row, patch) {
 async function pageAll(build) {
   const out = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await build().range(from, from + 999);
+    let data, error;
+    // при перегрузке базы (statement timeout) — повторяем с паузой
+    for (let attempt = 0; attempt < 5; attempt++) {
+      ({ data, error } = await build().range(from, from + 999));
+      if (!error) break;
+      console.log(`Запрос к базе не прошёл (${error.message}), повтор через ${10 * (attempt + 1)} с`);
+      await new Promise((r) => setTimeout(r, 10000 * (attempt + 1) + Math.random() * 5000));
+    }
     if (error) throw error;
     out.push(...data);
     if (data.length < 1000) break;
