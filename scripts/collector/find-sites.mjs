@@ -195,7 +195,8 @@ async function findOne(row) {
     }
   }
   // 3) Bing: «название + ИНН + официальный сайт», проверяем первые сайты на ИНН
-  if (!found && brand.length >= 2) {
+  // Bing с серверов GitHub (США) выдаёт нерелевантные результаты по русским запросам — по умолчанию выключен
+  if (!found && brand.length >= 2 && process.env.BING === "1") {
     for (const q of [`"${brand}" официальный сайт`, `${brand} ИНН ${row.inn}`]) {
       for (const u of await bingHosts(q)) {
         found = await tryUrl(u, "bing");
