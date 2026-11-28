@@ -1,0 +1,24 @@
+name: Строгая проверка автоподтверждённых
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "1 — пробно, без записи"
+        default: "1"
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DRY: ${{ inputs.dry }}
+        run: node strict-check.mjs
