@@ -1,0 +1,26 @@
+name: Финальный цвет (сканер v2.1)
+on: workflow_dispatch
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        working-directory: scripts/collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - env:
+          SUPABASE_URL: https://llhgagharnhyylbrcxwm.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: 4
+        run: node final-scan.mjs
