@@ -64,6 +64,10 @@ async function selectCompanies() {
     ({ data: rows } = await db.from("registry_companies").select(COLS).in("inn", inns));
   } else if (MODE === "top") {
     ({ data: rows } = await base().order("headcount", { ascending: false, nullsFirst: false }).order("inn").limit(LIMIT || 50));
+  } else if (MODE === "strict") {
+    // карточки, снятые строгой проверкой (повтор с российского адреса — сайты чаще показывают ИНН)
+    rows = await pageAll(() => db.from("registry_companies").select(COLS).not("website", "is", null).contains("logo_flags", ["strict_doubt"]).order("headcount", { ascending: false, nullsFirst: false }).order("inn"));
+    if (LIMIT > 0) rows = rows.slice(0, LIMIT);
   } else if (MODE === "recheck") {
     rows = await pageAll(() => base().or(`site_status.in.(${RECHECK.join(",")}),logo_flags.cs.{rejected},and(site_status.is.null,collect_log->>collector.eq.${COLLECTOR})`).order("headcount", { ascending: false, nullsFirst: false }).order("inn"));
   } else {
@@ -281,16 +285,20 @@ async function collectOne(browser, row) {
       const path = await upload(`${row.inn}/${hash.slice(0, 16)}.${EXT[logoType]}`, logoBuf, logoType);
       let scan = null;
       try { scan = await scanInBrowser(browser, logoBuf, logoType); } catch (e) { log.scan_error = String(e.message).slice(0, 200); }
-      let flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f)), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
+      let flags = [...new Set([...(row.logo_flags ?? []).filter((f) => ["parent_brand", "inverted"].includes(f) || f.startsWith("bg_")), ...autoFlags(scan), ...(logoFrom === "снимок со страницы" ? ["rendered"] : [])])];
       // ИНН засчитывается, если его нашёл этот или прежний прогон на том же сайте
       const siteOk = Boolean(innPage) || row.site_status === "ok";
       const siteBad = patch.site_status === "other_inn" || patch.site_status === "domain_lost";
       const [sure, doubts] = logoConfidence({ siteOk, siteBad, best, flags, logoFrom, tokens: brandTokens(row, finalUrl.host), scan });
-      flags = [...flags, sure ? "auto_confirmed" : "low_confidence"];
-      log.confidence = sure ? "уверен" : doubts;
-      if (!sure) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);
+      // в строгом режиме автоподтверждение только при найденном на сайте ИНН
+      const requireInn = MODE === "strict" || env("REQUIRE_INN", "") === "1";
+      const sureFinal = sure && (!requireInn || siteOk);
+      if (sure && !sureFinal) doubts.push("ИНН на сайте не найден");
+      flags = [...flags, sureFinal ? "auto_confirmed" : "low_confidence", ...(sureFinal ? [] : ["strict_doubt"])];
+      log.confidence = sureFinal ? "уверен" : doubts;
+      if (!sureFinal) notes.push(`Логотип требует проверки: ${doubts.join("; ")}.`);
       Object.assign(patch, {
-        logo_storage_path: path, logo_sha256: hash, logo_status: sure ? "ready" : "needs_check", logo_flags: flags,
+        logo_storage_path: path, logo_sha256: hash, logo_status: sureFinal ? "ready" : "needs_check", logo_flags: flags,
         logo_url: best.src && !best.src.startsWith("data:") ? best.src : `${finalUrl.origin}/ (${logoFrom})`,
         logo_source_url: `${finalUrl.href} — ${logoFrom}`,
       });
