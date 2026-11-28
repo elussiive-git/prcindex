@@ -41,7 +41,7 @@ for (const r of rows) {
   const why = [];
   if (r.site_status !== "ok") why.push("ИНН на сайте не найден");
   if (r.logo_sha256 && (domainsBySha.get(r.logo_sha256)?.size ?? 0) > 1) why.push("одинаковый файл у разных компаний");
-  const nColors = (r.palette ?? []).length;
+  const nColors = new Set((r.palette ?? []).map((c) => c.name)).size; // разные названия цветов
   if (flags.includes("rendered") && nColors >= 4) why.push("снимок со страницы с 4+ цветами");
   if (nColors >= 6) why.push("6+ цветов");
   const box = r.collect_log?.logo_candidates?.[0]?.box;
