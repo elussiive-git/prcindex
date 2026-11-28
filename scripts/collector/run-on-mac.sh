@@ -24,6 +24,6 @@ echo "Символы при вводе не отображаются — так 
 read -rs KEY
 echo
 [ -z "$KEY" ] && { echo "Ключ не введён."; exit 1; }
-echo "== Запуск. Не закрывайте окно Терминала и не выключайте компьютер, пока не появится «Итог»."
+echo "== Запуск. Не закрывайте окно Терминала и не выключайте компьютер, пока не появятся строки «Готово: … компаний» и «== Готово»."
 caffeinate -i env SUPABASE_URL=https://llhgagharnhyylbrcxwm.supabase.co SUPABASE_SECRET_KEY="$KEY" MODE="$MODE" SHARD=0 SHARDS=1 CONCURRENCY=4 node collect.mjs
 echo "== Готово. Окно можно закрыть."
